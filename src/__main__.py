@@ -1,5 +1,7 @@
+from .Model import RNN
+
 def main():
-    print("Tyler Herro")
+    pass    
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,9 @@
-## Ignore IDE project files
+## Local State Folders
+/data/
+/models/
+
+## Ignore rubbish IDE project files
 /.idea
-.vscode
 
 ###### PYTHON STUFF #######
 # Byte-compiled / optimized / DLL files
