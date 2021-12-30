@@ -1,6 +1,6 @@
 ## Ignore IDE project files
 /.idea
-/.vscode
+.vscode
 
 ###### PYTHON STUFF #######
 # Byte-compiled / optimized / DLL files
