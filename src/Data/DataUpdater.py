@@ -18,6 +18,7 @@ import json
 from os import environ, path
 import requests
 from datetime import timedelta, datetime
+from utils.polygon_api import format_symbol_for_api
 
 
 def get_time_delta(multiplier: int, measurement: str) -> timedelta:
@@ -36,6 +37,8 @@ def get_time_delta(multiplier: int, measurement: str) -> timedelta:
     elif measurement == "year":
         return timedelta(days = 365 * multiplier)
     return timedelta(minutes = 1)
+    
+
 
 class DataUpdater:
 
@@ -47,15 +50,20 @@ class DataUpdater:
         self.google_drive_token = tokens["google_drive"]
         self.polygonio_token = tokens["polygonio"]
 
-        print(self.get_from_api("C:EURUSD", datetime(2021, 12, 28), datetime(2021, 12, 29)))
+        # print(self.get_from_api("C:EURUSD", datetime(2021, 12, 28), datetime(2021, 12, 29)))
+        self.get_required_data("EURUSD", datetime(2021, 12, 28), datetime(2021, 12, 29))
 
     def get_required_data(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute"):
+        print(symbol)
+        print(format_symbol_for_api(symbol))
         # Does data already exist?
         data_folder = path.join(environ["workspace"], "data")
         time_delta = get_time_delta(multiplier, measurement)
 
         if time_delta < timedelta(hours = 1):
+            folder = path.join(data_folder, "monthly")
             # Look for monthly csv files
+            print(path.join(folder, f"{symbol}-{multiplier}-{measurement}-{start.date()}-to-{end.date()}.csv"))
             pass
         elif time_delta < timedelta(days = 1):
             # Look for yearly csv files
