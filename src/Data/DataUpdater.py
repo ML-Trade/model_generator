@@ -59,14 +59,14 @@ class DataUpdater:
         self.polygonio_token = tokens["polygonio"]
 
         # print(self.get_from_api("C:EURUSD", datetime(2021, 12, 28), datetime(2021, 12, 29)))
-        self.get_required_data("EURUSD", datetime(2020, 10, 28), datetime(2021, 12, 29))
+        df = self.get_required_data("EURUSD", datetime(2020, 10, 28), datetime(2021, 12, 29))
+        print(df)
 
-    def get_required_data(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute"):
-        # Does data already exist?
+    def get_required_data(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute") -> pd.DataFrame:
         data_folder = path.join(environ["workspace"], "data")
         time_delta = get_time_delta(multiplier, measurement)
 
-        def get_data_with_file_interval(file_interval: str):
+        def get_data_with_file_interval(file_interval: str) -> pd.DataFrame:
             folder = path.join(data_folder, file_interval)
             
             adjusted_start = start if file_interval == "monthly" else start.replace(month = 1)
@@ -75,6 +75,7 @@ class DataUpdater:
             adjusted_end = adjusted_end.replace(day = get_last_day_of_month(end))
             
             # Process one month at a time
+            df = pd.DataFrame()
             range_start = adjusted_start
             range_end = None
             while range_end != adjusted_end:
@@ -82,14 +83,16 @@ class DataUpdater:
                 range_end = range_end.replace(day = get_last_day_of_month(range_end))
                 file_path = path.join(folder, f"{symbol}-{multiplier}-{measurement}-{range_start.date()}-to-{range_end.date()}.csv")
                 try:
-                    df = pd.read_csv(file_path)
-                    print(df)
+                    range_df = pd.read_csv(file_path)
+                    df = pd.concat([df, range_df])
+                    print(range_df)
                     print("Read from csv file")
                 except:
                     # File did not exist; use polygon.io API then save the file
                     res = self.get_from_api(symbol, range_start, range_end, multiplier, measurement)
-                    df = pd.DataFrame.from_dict(res["results"])
-                    print(df)
+                    range_df = pd.DataFrame.from_dict(res["results"])
+                    df = pd.concat([df, range_df])
+                    print(range_df)
                     print("Obtained from polygon.io")
                     df.to_csv(file_path, index = False)
                     if IS_FREE_TIER:
@@ -99,11 +102,12 @@ class DataUpdater:
                 # 35 days is enough to always set to next month, 366 enough to always set to next year
                 delta_days = 35 if file_interval == "monthly" else 366
                 range_start = (range_start + timedelta(days = delta_days)).replace(day = 1)
+            return df
 
         if time_delta < timedelta(hours = 1):
-            get_data_with_file_interval("monthly")
+            return get_data_with_file_interval("monthly")
         else:
-            get_data_with_file_interval("yearly")
+            return get_data_with_file_interval("yearly")
 
 
 
