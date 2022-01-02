@@ -41,6 +41,10 @@ def get_time_delta(multiplier: int, measurement: str) -> timedelta:
     return timedelta(minutes = 1)
     
 
+def get_last_day_of_month(date: datetime):
+    (_, last_day_of_month) = calendar.monthrange(date.year, date.month)
+    return last_day_of_month
+
 
 class DataUpdater:
 
@@ -53,52 +57,50 @@ class DataUpdater:
         self.polygonio_token = tokens["polygonio"]
 
         # print(self.get_from_api("C:EURUSD", datetime(2021, 12, 28), datetime(2021, 12, 29)))
-        self.get_required_data("EURUSD", datetime(2021, 10, 28), datetime(2023, 12, 29))
+        self.get_required_data("EURUSD", datetime(2020, 10, 28), datetime(2021, 12, 29))
 
-    def get_required_data(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute"):
+    def get_required_data(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "hour"):
         # Does data already exist?
         data_folder = path.join(environ["workspace"], "data")
         time_delta = get_time_delta(multiplier, measurement)
 
-        if time_delta < timedelta(hours = 1):
-            folder = path.join(data_folder, "monthly")
-
-            (_, last_day_of_month) = calendar.monthrange(end.year, end.month)
-            adjusted_start = start.replace(day = 1)
-            adjusted_end = end.replace(day = last_day_of_month)
+        def get_data_with_file_interval(file_interval: str):
+            folder = path.join(data_folder, file_interval)
+            
+            adjusted_start = start if file_interval == "monthly" else start.replace(month = 1)
+            adjusted_start = adjusted_start.replace(day = 1)
+            adjusted_end = end if file_interval == "monthly" else end.replace(month = 12)
+            adjusted_end = adjusted_end.replace(day = get_last_day_of_month(end))
             
             # Process one month at a time
-            month_start = adjusted_start
-            month_end = None
-            while month_end != adjusted_end:
-                (_, last_day_of_month) = calendar.monthrange(month_start.year, month_start.month)
-                month_end = month_start.replace(day = last_day_of_month)
-                file_path = path.join(folder, f"{symbol}-{multiplier}-{measurement}-{month_start.date()}-to-{month_end.date()}.csv")
+            range_start = adjusted_start
+            range_end = None
+            while range_end != adjusted_end:
+                range_end = range_start if file_interval == "monthly" else range_start.replace(month = 12)
+                range_end = range_end.replace(day = get_last_day_of_month(range_end))
+                file_path = path.join(folder, f"{symbol}-{multiplier}-{measurement}-{range_start.date()}-to-{range_end.date()}.csv")
                 try:
                     df = pd.read_csv(file_path)
                     print(df)
                     print("Read from csv file")
                 except:
-                    # File did not exist
-                    # Use polygon API then save the file
-                    res = self.get_from_api(symbol, month_start, month_end, multiplier, measurement)
+                    # File did not exist; use polygon.io API then save the file
+                    res = self.get_from_api(symbol, range_start, range_end, multiplier, measurement)
                     df = pd.DataFrame.from_dict(res["results"])
                     print(df)
                     print("Obtained from polygon.io")
                     df.to_csv(file_path, index = False)
-                    exit()
-                # 35 days is enough to always set to next month, then make it start of the month.
-                month_start = (month_start + timedelta(days = 35)).replace(day = 1)
-                
+                    # TODO: Sleep here to avoid hitting free resource tier limits (or pay $49 per month)
+                    
+                # 35 days is enough to always set to next month, 366 enough to always set to next year
+                delta_days = 35 if file_interval == "monthly" else 366
+                range_start = (range_start + timedelta(days = delta_days)).replace(day = 1)
 
-            # Look for monthly csv files
-            # print(path.join(folder, f"{symbol}-{multiplier}-{measurement}-{start.date()}-to-{end.date()}.csv"))
-        elif time_delta < timedelta(days = 1):
-            # Look for yearly csv files
-            pass
+        if time_delta < timedelta(hours = 1):
+            get_data_with_file_interval("monthly")
         else:
-            # Look for decadely csv files
-            pass
+            get_data_with_file_interval("yearly")
+
 
 
         
