@@ -17,8 +17,9 @@ For < hour
 import json
 from os import environ, path
 import requests
-from datetime import timedelta, datetime
+from datetime import date, timedelta, datetime
 from utils.polygon_api import format_symbol_for_api
+import calendar
 
 
 def get_time_delta(multiplier: int, measurement: str) -> timedelta:
@@ -51,20 +52,33 @@ class DataUpdater:
         self.polygonio_token = tokens["polygonio"]
 
         # print(self.get_from_api("C:EURUSD", datetime(2021, 12, 28), datetime(2021, 12, 29)))
-        self.get_required_data("EURUSD", datetime(2021, 12, 28), datetime(2021, 12, 29))
+        self.get_required_data("EURUSD", datetime(2021, 10, 28), datetime(2023, 12, 29))
 
     def get_required_data(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute"):
-        print(symbol)
-        print(format_symbol_for_api(symbol))
         # Does data already exist?
         data_folder = path.join(environ["workspace"], "data")
         time_delta = get_time_delta(multiplier, measurement)
 
         if time_delta < timedelta(hours = 1):
             folder = path.join(data_folder, "monthly")
+
+            (_, last_day_of_month) = calendar.monthrange(end.year, end.month)
+            adjusted_start = start.replace(day = 1)
+            adjusted_end = end.replace(day = last_day_of_month)
+            
+            # Process one month at a time
+            month_start = adjusted_start
+            month_end = None
+            while month_end != adjusted_end:
+                (_, last_day_of_month) = calendar.monthrange(month_start.year, month_start.month)
+                month_end = month_start.replace(day = last_day_of_month)
+                file_path = path.join(folder, f"{symbol}-{multiplier}-{measurement}-{month_start.date()}-to-{month_end.date()}.csv")
+                # 35 days is enough to always set to next month, then make it start of the month.
+                month_start = (month_start + timedelta(days = 35)).replace(day = 1)
+                print(file_path)
+
             # Look for monthly csv files
-            print(path.join(folder, f"{symbol}-{multiplier}-{measurement}-{start.date()}-to-{end.date()}.csv"))
-            pass
+            # print(path.join(folder, f"{symbol}-{multiplier}-{measurement}-{start.date()}-to-{end.date()}.csv"))
         elif time_delta < timedelta(days = 1):
             # Look for yearly csv files
             pass
@@ -77,7 +91,7 @@ class DataUpdater:
     
     def get_from_api(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute") -> dict:
         res: dict = requests.get(
-            f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/{multiplier}/{measurement}/{start.date()}/{end.date()}",
+            f"https://api.polygon.io/v2/aggs/ticker/{format_symbol_for_api(symbol)}/range/{multiplier}/{measurement}/{start.date()}/{end.date()}",
             headers={ "Authorization": f"Bearer {self.polygonio_token}" }
         ).json()
         return res

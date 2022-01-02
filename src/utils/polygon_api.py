@@ -1,5 +1,6 @@
 def format_symbol_for_api(symbol: str):
     symbol = symbol.replace("/", "")
+    symbol = symbol.split(":")[-1]
 
     currencies = [
         "AUDCAD",
