@@ -14,6 +14,7 @@ For < hour
 {symbol}-{minute}-{measurement}-{start}-{end}.csv
 """
 
+# TODO: Remove this when / if you upgrade to the paid tier on polygon.io
 IS_FREE_TIER = True
 
 import json
@@ -57,11 +58,7 @@ class DataUpdater:
         self.github_token = tokens["github"]
         self.google_drive_token = tokens["google_drive"]
         self.polygonio_token = tokens["polygonio"]
-
-        # print(self.get_from_api("C:EURUSD", datetime(2021, 12, 28), datetime(2021, 12, 29)))
-        df = self.get_required_data("EURUSD", datetime(2020, 10, 28), datetime(2021, 12, 29))
-        print(df)
-
+        
     def get_required_data(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute") -> pd.DataFrame:
         data_folder = path.join(environ["workspace"], "data")
         time_delta = get_time_delta(multiplier, measurement)
