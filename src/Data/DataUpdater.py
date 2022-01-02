@@ -60,6 +60,10 @@ class DataUpdater:
         self.polygonio_token = tokens["polygonio"]
         
     def get_required_data(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute") -> pd.DataFrame:
+        """
+        Gets requested historical data and returns as a Pandas dataframe.
+        Historical data obtained from polygon.io api for the first time is saved locally in the root data folder 
+        """
         data_folder = path.join(environ["workspace"], "data")
         time_delta = get_time_delta(multiplier, measurement)
 
@@ -105,10 +109,7 @@ class DataUpdater:
             return get_data_with_file_interval("monthly")
         else:
             return get_data_with_file_interval("yearly")
-
-
-
-        
+                    
     
     def get_from_api(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute") -> dict:
         res: dict = requests.get(
