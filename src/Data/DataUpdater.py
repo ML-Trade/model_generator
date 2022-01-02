@@ -14,6 +14,8 @@ For < hour
 {symbol}-{minute}-{measurement}-{start}-{end}.csv
 """
 
+IS_FREE_TIER = True
+
 import json
 from os import environ, path
 import requests
@@ -21,7 +23,7 @@ from datetime import date, timedelta, datetime
 from utils.polygon_api import format_symbol_for_api
 import calendar
 import pandas as pd
-
+import time
 
 def get_time_delta(multiplier: int, measurement: str) -> timedelta:
     if measurement == "second":
@@ -59,7 +61,7 @@ class DataUpdater:
         # print(self.get_from_api("C:EURUSD", datetime(2021, 12, 28), datetime(2021, 12, 29)))
         self.get_required_data("EURUSD", datetime(2020, 10, 28), datetime(2021, 12, 29))
 
-    def get_required_data(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "hour"):
+    def get_required_data(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute"):
         # Does data already exist?
         data_folder = path.join(environ["workspace"], "data")
         time_delta = get_time_delta(multiplier, measurement)
@@ -90,8 +92,10 @@ class DataUpdater:
                     print(df)
                     print("Obtained from polygon.io")
                     df.to_csv(file_path, index = False)
-                    # TODO: Sleep here to avoid hitting free resource tier limits (or pay $49 per month)
-                    
+                    if IS_FREE_TIER:
+                        print("On polygon.io free tier - only 5 requests max per minute; sleeping...")
+                        time.sleep(60 / 5) # 5 requests per minute
+
                 # 35 days is enough to always set to next month, 366 enough to always set to next year
                 delta_days = 35 if file_interval == "monthly" else 366
                 range_start = (range_start + timedelta(days = delta_days)).replace(day = 1)
