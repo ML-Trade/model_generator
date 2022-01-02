@@ -20,6 +20,7 @@ import requests
 from datetime import date, timedelta, datetime
 from utils.polygon_api import format_symbol_for_api
 import calendar
+import pandas as pd
 
 
 def get_time_delta(multiplier: int, measurement: str) -> timedelta:
@@ -73,9 +74,22 @@ class DataUpdater:
                 (_, last_day_of_month) = calendar.monthrange(month_start.year, month_start.month)
                 month_end = month_start.replace(day = last_day_of_month)
                 file_path = path.join(folder, f"{symbol}-{multiplier}-{measurement}-{month_start.date()}-to-{month_end.date()}.csv")
+                try:
+                    df = pd.read_csv(file_path)
+                    print(df)
+                    print("Read from csv file")
+                except:
+                    # File did not exist
+                    # Use polygon API then save the file
+                    res = self.get_from_api(symbol, month_start, month_end, multiplier, measurement)
+                    df = pd.DataFrame.from_dict(res["results"])
+                    print(df)
+                    print("Obtained from polygon.io")
+                    df.to_csv(file_path, index = False)
+                    exit()
                 # 35 days is enough to always set to next month, then make it start of the month.
                 month_start = (month_start + timedelta(days = 35)).replace(day = 1)
-                print(file_path)
+                
 
             # Look for monthly csv files
             # print(path.join(folder, f"{symbol}-{multiplier}-{measurement}-{start.date()}-to-{end.date()}.csv"))
@@ -91,7 +105,7 @@ class DataUpdater:
     
     def get_from_api(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute") -> dict:
         res: dict = requests.get(
-            f"https://api.polygon.io/v2/aggs/ticker/{format_symbol_for_api(symbol)}/range/{multiplier}/{measurement}/{start.date()}/{end.date()}",
+            f"https://api.polygon.io/v2/aggs/ticker/{format_symbol_for_api(symbol)}/range/{multiplier}/{measurement}/{start.date()}/{end.date()}?adjusted=true&sort=asc&limit=50000",
             headers={ "Authorization": f"Bearer {self.polygonio_token}" }
         ).json()
         return res
