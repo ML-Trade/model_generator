@@ -38,4 +38,22 @@ class TSDataPreprocessor():
 
         All else is standardised
         """
+
+
+        # Convert to pct change
+
+        # Add Target
+
+        # Standardise / Normalise (maybe pass these functions in?)
+
+        # Balance
+
+        # Convert into numpy sequences
+
+        # Split into training and validation
+
+        # Save data
+
+        # Shuffle training set 
+        
         pass
