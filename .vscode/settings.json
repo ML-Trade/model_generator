@@ -4,5 +4,6 @@
     "git.ignoreLimitWarning": true,
     "python.formatting.provider": "none",
     "python.languageServer": "Default",
-    "python.linting.mypyEnabled": true
+    "python.linting.mypyEnabled": true,
+    "cmake.configureOnOpen": false
 }
