@@ -1,4 +1,5 @@
 def format_symbol_for_api(symbol: str):
+    symbol = symbol.upper()
     symbol = symbol.replace("/", "")
     symbol = symbol.split(":")[-1]
 

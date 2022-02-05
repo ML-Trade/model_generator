@@ -9,7 +9,7 @@ class TSDataPreprocessor():
         target_col_name: str,
         sequence_length = 100,
         forecast_period = 10,
-        custom_norm_functions: Dict[str, Callable[[pd.Series], pd.Series]] = {},
+        custom_pct_change: Dict[str, Callable[[pd.Series], pd.Series]] = {},
     ):
         """
         If preprocessed data already exists in the root data folder, it will be loaded, and preprocessing will be skipped
@@ -25,7 +25,7 @@ class TSDataPreprocessor():
         self.target_col_name = target_col_name
         self.sequence_length = sequence_length
         self.forecast_period = forecast_period
-        self.custom_norm_functions = custom_norm_functions
+        self.custom_pct_change = custom_pct_change
         data_hash = hex(hash(raw_data.to_numpy().tobytes()))[2:8]
 
     
@@ -36,12 +36,9 @@ class TSDataPreprocessor():
         E.g. row standard deviations, means, percentiles etc.
         
         Preprocessing Volume:
-        Add overall average to all volume
-        Minus Long Moving Average of Volume (maybe 200)
-        MinMax it between -1 and 1
-
-        Date should be split into day of the week, day in the month, and how far through the year,
-        then minmaxed between -1 and 1
+        Make it a moving average (between 5 and 200 picked by GA)
+        Then have it as percent change and standardised
+        We best percieve volume as how it changes / slopes. This will best capture this
 
         All else is standardised
         """
@@ -52,12 +49,12 @@ class TSDataPreprocessor():
         for col_name in self.df:
             new_col
             if col_name not in keys:
-                new_col = self.default_norm(self.df[col_name])
+                new_col = self.default_pct_change(self.df[col_name])
             else:
-                new_col = self.custom_norm_functions[col_name](self.df[col_name])
+                new_col = self.custom_pct_change[col_name](self.df[col_name])
             self.df[col_name] = new_col
     
-        # Add Target
+        # Add Target (target can be added after since its classification)
 
         self.df[self.target_col_name] = target_col
 
