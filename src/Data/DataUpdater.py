@@ -18,7 +18,7 @@ For < hour
 IS_FREE_TIER = True
 
 import json
-from os import environ, path
+import os
 import requests
 from datetime import date, timedelta, datetime
 from utils.polygon_api import format_symbol_for_api
@@ -52,23 +52,26 @@ def get_last_day_of_month(date: datetime):
 class DataUpdater:
 
     def __init__(self) -> None:
-        token_file = open(path.join(environ["workspace"], "tokens.json"))
-        tokens = json.load(token_file)
+        token_file = open(os.path.join(os.environ["workspace"], "tokens.json"))
+        tokens: dict = json.load(token_file)
+        if "PUT TOKEN HERE" in json.dumps(tokens):
+            raise Exception("Tokens file not updated. Please add access tokens to tokens.json")
         token_file.close()
         self.github_token = tokens["github"]
         self.google_drive_token = tokens["google_drive"]
         self.polygonio_token = tokens["polygonio"]
         
-    def get_required_data(self, symbol: str, start: datetime, end: datetime, multiplier = 1, measurement = "minute") -> pd.DataFrame:
+    def get_required_data(self, symbol: str, *, start: datetime, end: datetime, multiplier = 1, measurement = "minute") -> pd.DataFrame:
         """
         Gets requested historical data and returns as a Pandas dataframe.
         Historical data obtained from polygon.io api for the first time is saved locally in the root data folder 
         """
-        data_folder = path.join(environ["workspace"], "data")
+        data_folder = os.path.join(os.environ["workspace"], "data")
         time_delta = get_time_delta(multiplier, measurement)
 
         def get_data_with_file_interval(file_interval: str) -> pd.DataFrame:
-            folder = path.join(data_folder, file_interval)
+            folder = os.path.join(data_folder, file_interval)
+            os.makedirs(folder, exist_ok=True)
             
             adjusted_start = start if file_interval == "monthly" else start.replace(month = 1)
             adjusted_start = adjusted_start.replace(day = 1)
@@ -78,11 +81,11 @@ class DataUpdater:
             # Process one month at a time
             df = pd.DataFrame()
             range_start = adjusted_start
-            range_end = None
-            while range_end != adjusted_end:
+            range_end = datetime.min # Will set later
+            while range_end != adjusted_end and range_end < datetime.now():
                 range_end = range_start if file_interval == "monthly" else range_start.replace(month = 12)
                 range_end = range_end.replace(day = get_last_day_of_month(range_end))
-                file_path = path.join(folder, f"{symbol}-{multiplier}-{measurement}-{range_start.date()}-to-{range_end.date()}.csv")
+                file_path = os.path.join(folder, f"{symbol}-{multiplier}-{measurement}-{range_start.date()}-to-{range_end.date()}.csv")
                 try:
                     range_df = pd.read_csv(file_path)
                     df = pd.concat([df, range_df])
@@ -95,6 +98,7 @@ class DataUpdater:
                     df = pd.concat([df, range_df])
                     print(range_df)
                     print("Obtained from polygon.io")
+
                     df.to_csv(file_path, index = False)
                     if IS_FREE_TIER:
                         print("On polygon.io free tier - only 5 requests max per minute; sleeping...")
