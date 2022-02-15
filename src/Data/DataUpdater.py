@@ -99,7 +99,7 @@ class DataUpdater:
                     print(range_df)
                     print("Obtained from polygon.io")
 
-                    df.to_csv(file_path, index = False)
+                    range_df.to_csv(file_path, index = False)
                     if IS_FREE_TIER:
                         print("On polygon.io free tier - only 5 requests max per minute; sleeping...")
                         time.sleep(60 / 5) # 5 requests per minute
