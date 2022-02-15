@@ -1,7 +1,14 @@
 from datetime import datetime
 from os import times
-from typing import Dict, Callable
+import re
+from typing import Dict, Callable, Union
 import pandas as pd
+import numpy as np
+
+##  TODO: move this to utils
+def minmax_norm(array: Union[list, np.ndarray]) -> pd.Series:
+    np_array = np.array(array)
+    return pd.Series((np_array - np.min(np_array)) / (np.max(array) - np.min(array)))
 
 class TSDataPreprocessor():
     """
@@ -75,15 +82,28 @@ class TSDataPreprocessor():
                 time_of_day_col.append(timestamp.second + (timestamp.minute * 60) + (timestamp.hour * 60 * 60))
                 day_of_week_col.append(timestamp.weekday())
                 week_of_year_col.append(timestamp.isocalendar().week)
-            self.df["time_of_day"] = time_of_day_col
-            self.df["day_of_week"] = day_of_week_col
-            self.df["week_of_year"] = week_of_year_col
+            
+            self.df["time_of_day"] = minmax_norm(time_of_day_col)
+            self.df["day_of_week"] = minmax_norm(day_of_week_col)
+            self.df["week_of_year"] = minmax_norm(week_of_year_col)
 
         # Add Target (target can be added after since its classification)
-
-        # self.df[self.target_col_name] = target_col
+        target = []
+        raw_target_col = self.df[self.target_col_name]
+        for index, value in raw_target_col.items():
+            try:
+                if value < raw_target_col[index + self.forecast_period]:
+                    ## TODO: Enum or globalise this?
+                    target.append(1) # Buy
+                else:
+                    # NOTE: This may have a slight bias to selling; if theyre equal target is sell
+                    target.append(0) # Sell
+            except:
+                target.append(np.nan)
+        self.df["target"] = target
 
         # Standardise / Normalise (maybe pass these functions in?)
+        std_exceptions = ["target", "time_of_day", "day_of_week", "week_of_year"] # Don't std these
 
         # Balance
 
@@ -99,5 +119,5 @@ class TSDataPreprocessor():
 
         # Shuffle training set 
         
-        print("Values after precrocessing:")
+        print("Values after preprocessing:")
         print(self.df)

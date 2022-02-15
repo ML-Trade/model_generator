@@ -89,6 +89,7 @@ class DataUpdater:
                 try:
                     range_df = pd.read_csv(file_path)
                     df = pd.concat([df, range_df])
+                    df.reset_index(inplace=True, drop=True)
                     print(range_df)
                     print("Read from csv file")
                 except:
@@ -96,6 +97,7 @@ class DataUpdater:
                     res = self.get_from_api(symbol, range_start, range_end, multiplier, measurement)
                     range_df = pd.DataFrame.from_dict(res["results"])
                     df = pd.concat([df, range_df])
+                    df.reset_index(inplace=True, drop=True)
                     print(range_df)
                     print("Obtained from polygon.io")
 

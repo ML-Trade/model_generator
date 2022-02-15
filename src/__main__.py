@@ -49,7 +49,9 @@ def main():
             "v": lambda series: moving_average(series, VOLUME_MA_PERIOD).pct_change()
         }
     )
+    pd.set_option('display.max_columns', None)
     preprocessor.preprocess()
+    
 
 
 if __name__ == "__main__":
