@@ -1,6 +1,7 @@
 from datetime import datetime
 from os import times
 import re
+from turtle import Turtle
 from typing import Dict, Callable, Union
 import pandas as pd
 import numpy as np
@@ -9,6 +10,9 @@ import numpy as np
 def minmax_norm(array: Union[list, np.ndarray]) -> pd.Series:
     np_array = np.array(array)
     return pd.Series((np_array - np.min(np_array)) / (np.max(array) - np.min(array)))
+
+def standardise(arr: np.ndarray):
+    return (arr - np.mean(arr)) / np.std(arr)
 
 class TSDataPreprocessor():
     """
@@ -71,6 +75,7 @@ class TSDataPreprocessor():
             else:
                 new_col = self.custom_pct_change[col_name](self.df[col_name])
             self.df[col_name] = new_col
+        self.df.dropna(inplace=True)
 
         # Handle time data
         if time_col is not None:   
@@ -101,9 +106,13 @@ class TSDataPreprocessor():
             except:
                 target.append(np.nan)
         self.df["target"] = target
+        self.df.dropna(inplace=True)
 
         # Standardise / Normalise (maybe pass these functions in?)
         std_exceptions = ["target", "time_of_day", "day_of_week", "week_of_year"] # Don't std these
+        for col in self.df.columns:
+            if col not in std_exceptions:
+                self.df[col] = standardise(self.df[col].to_numpy())
 
         # Balance
 
