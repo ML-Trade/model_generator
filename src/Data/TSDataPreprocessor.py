@@ -1,3 +1,5 @@
+from datetime import datetime
+from os import times
 from typing import Dict, Callable
 import pandas as pd
 
@@ -9,6 +11,7 @@ class TSDataPreprocessor():
         target_col_name: str,
         sequence_length = 100,
         forecast_period = 10,
+        time_col_name = None,
         custom_pct_change: Dict[str, Callable[[pd.Series], pd.Series]] = {},
     ):
         """
@@ -26,6 +29,7 @@ class TSDataPreprocessor():
         self.sequence_length = sequence_length
         self.forecast_period = forecast_period
         self.custom_pct_change = custom_pct_change
+        self.time_col_name = time_col_name
         data_hash = hex(hash(raw_data.to_numpy().tobytes()))[2:8]
 
     
@@ -36,7 +40,7 @@ class TSDataPreprocessor():
         E.g. row standard deviations, means, percentiles etc.
         
         Preprocessing Volume:
-        Make it a moving average (between 5 and 200 picked by GA)
+        Make it a moving average (between 3 and 200 picked by GA)
         Then have it as percent change and standardised
         We best percieve volume as how it changes / slopes. This will best capture this
 
@@ -44,23 +48,48 @@ class TSDataPreprocessor():
         """
 
 
+        # Remove time column for later handling
+        time_col = None
+        if self.time_col_name is not None:
+            time_col = self.df[self.time_col_name].to_numpy()
+            self.df.drop(columns=[self.time_col_name], inplace=True)
+
         # Convert to pct change
-        keys = self.custom_norm_functions.keys()
+        
+        keys = self.custom_pct_change.keys()
         for col_name in self.df:
-            new_col
+            new_col = None
             if col_name not in keys:
-                new_col = self.default_pct_change(self.df[col_name])
+                new_col = self.df[col_name].pct_change()
             else:
                 new_col = self.custom_pct_change[col_name](self.df[col_name])
             self.df[col_name] = new_col
-    
+
+        # Handle time data
+        if time_col is not None:   
+            time_of_day_col = []
+            day_of_week_col = []
+            week_of_year_col = []
+            for val in time_col:
+                timestamp = datetime.fromtimestamp(val / 1000)
+                time_of_day_col.append(timestamp.second + (timestamp.minute * 60) + (timestamp.hour * 60 * 60))
+                day_of_week_col.append(timestamp.weekday())
+                week_of_year_col.append(timestamp.isocalendar().week)
+            self.df["time_of_day"] = time_of_day_col
+            self.df["day_of_week"] = day_of_week_col
+            self.df["week_of_year"] = week_of_year_col
+
         # Add Target (target can be added after since its classification)
 
-        self.df[self.target_col_name] = target_col
+        # self.df[self.target_col_name] = target_col
 
         # Standardise / Normalise (maybe pass these functions in?)
 
         # Balance
+
+        # Cleanup (remove NA etc)
+
+        self.df.dropna(inplace=True)
 
         # Convert into numpy sequences
 
@@ -70,4 +99,5 @@ class TSDataPreprocessor():
 
         # Shuffle training set 
         
-        pass
+        print("Values after precrocessing:")
+        print(self.df)
