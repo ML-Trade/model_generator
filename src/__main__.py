@@ -33,7 +33,7 @@ def main():
         multiplier = 1,
         measurement = "minute"
     )
-    df.drop(columns=["vw"], inplace=True)
+    df.drop(columns=["vw", "n"], inplace=True)
     
     print(df)
     print("Preprocessing Data...")

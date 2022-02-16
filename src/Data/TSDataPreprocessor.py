@@ -1,8 +1,12 @@
+from collections import deque
 from datetime import datetime
+from msilib import sequence
 from os import times
+import random
 import re
+from tokenize import group
 from turtle import Turtle
-from typing import Dict, Callable, Union
+from typing import Deque, Dict, Callable, Union
 import pandas as pd
 import numpy as np
 
@@ -114,13 +118,59 @@ class TSDataPreprocessor():
             if col not in std_exceptions:
                 self.df[col] = standardise(self.df[col].to_numpy())
 
-        # Balance
 
         # Cleanup (remove NA etc)
 
         self.df.dropna(inplace=True)
 
         # Convert into numpy sequences
+        # [
+        #    [[sequence1], target1]
+        #    [[sequence2], target2]
+        # ]  
+        sequences = [] 
+        cur_sequence = deque(maxlen=self.sequence_length)
+        target_index = self.df.columns.get_loc("target")
+        for index, value in enumerate(self.df.to_numpy()):
+            # Since value is only considered a single value in the sequence (even though itself is an array), to make it a sequence, we encapsulate it in an array so:
+            # sequence1 = [[values1], [values2], [values3]]
+            val_without_target = np.concatenate((value[:target_index], value[target_index + 1:]))
+            cur_sequence.append(val_without_target) # Append all but target to cur_sequence
+            if len(cur_sequence) == self.sequence_length:
+                seq = list(cur_sequence)
+                sequences.append([np.array(seq), value[target_index]]) # value[-1] is the target        
+        
+        random.shuffle(sequences) # Shuffle sequences to avoid order effects on learning
+
+        data_x = []
+        data_y = []
+        for seq, target in sequences:
+            data_x.append(seq)
+            data_y.append(target)
+        
+        data_x = np.array(data_x)
+        data_y = np.array(data_y)
+
+        # Balance
+        target_index = list(self.df.columns).index("target")
+        group_indices = {}
+        groups, counts = np.unique(data_y, return_counts=True)
+        for index, target in enumerate(data_y):
+            for group in groups:
+                if group not in group_indices: group_indices[group] = []
+                if target == group: group_indices[group].append(index)
+
+        for group, indices in group_indices.items():
+            np.random.shuffle(group_indices[group]) # Shuffle removal order
+            dif = len(indices) - np.min(counts)
+            for i in range(dif):
+                index = group_indices[group].pop()
+                data_x[index] = np.full(data_x[index].shape, np.nan)
+                data_y[index] = np.nan
+        
+        data_x = data_x[~np.isnan(data_x)].reshape(-1, *data_x.shape[1:])
+        data_y = data_y[~np.isnan(data_y)]
+                
 
         # Split into training and validation
 
