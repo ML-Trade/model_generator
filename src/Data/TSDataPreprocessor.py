@@ -140,7 +140,8 @@ class TSDataPreprocessor():
                 seq = list(cur_sequence)
                 sequences.append([np.array(seq), value[target_index]]) # value[-1] is the target        
         
-        random.shuffle(sequences) # Shuffle sequences to avoid order effects on learning
+        # TODO: COME BACK TO SHUFFLE LATER
+        # random.shuffle(sequences) # Shuffle sequences to avoid order effects on learning
 
         data_x = []
         data_y = []
