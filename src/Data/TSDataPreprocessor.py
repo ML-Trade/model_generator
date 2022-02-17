@@ -28,7 +28,7 @@ class PreprocessedFileInfo:
     forecast_period: int
 
 @dataclass
-class Datasets:
+class Dataset:
     train_x: np.ndarray
     train_y: np.ndarray
     val_x: np.ndarray
@@ -68,53 +68,32 @@ class TSDataPreprocessor():
         return f"{data_hash}__{df_title}__SeqLen-{sequence_length}__Forecast-{forecast_period}.npy"
 
 
-    
-    def preprocess(self, raw_data: pd.DataFrame, *,
-        target_col_name: str,
-        sequence_length = 100,
-        forecast_period = 10,
-        train_split = 0.8,
-        time_col_name = None,
-        custom_pct_change: Dict[str, Callable[[pd.Series], pd.Series]] = {}
-    ) -> Datasets:
-        """
-        Notes:
-        Somewhere here you will need to save some metadata so you can preprocess new data, not just a dataset.
-        E.g. row standard deviations, means, percentiles etc.
-        
-        Preprocessing Volume:
-        Make it a moving average (between 3 and 200 picked by GA)
-        Then have it as percent change and standardised
-        We best percieve volume as how it changes / slopes. This will best capture this
-
-        All else is standardised
-        """
-        df = raw_data.copy()
-        df_title = df.style.caption or "~"
-        data_hash = hashlib.sha256(pd.util.hash_pandas_object(raw_data, index=True).values).hexdigest()[2:8] # First 6 hex chars
+    @staticmethod
+    def load_existing_dataset(raw_data: pd.DataFrame):
+        data_hash = TSDataPreprocessor.get_data_hash(raw_data)
         train_folder = os.path.join(os.environ["workspace"], "data", "preprocessed", "train")
         val_folder = os.path.join(os.environ["workspace"], "data", "preprocessed", "validation")
         for file_path in glob.glob(os.path.join(train_folder, "*.npy")):
-            file_info = self.deconstruct_filename(file_path)
+            file_info = TSDataPreprocessor.deconstruct_filename(file_path)
             if file_info.data_hash == data_hash:
                 print("Same hash; this dataset has been preprocessed before. Using old version")
-                filename_template = self.get_preprocessed_filename(file_info.data_hash, file_info.title, file_info.sequence_length, file_info.forecast_period)
+                filename_template = TSDataPreprocessor.get_preprocessed_filename(file_info.data_hash, file_info.title, file_info.sequence_length, file_info.forecast_period)
                 train_x = np.load(os.path.join(train_folder, f"train-x__{filename_template}"))
                 train_y = np.load(os.path.join(train_folder, f"train-y__{filename_template}"))
                 val_x = np.load(os.path.join(val_folder, f"val-x__{filename_template}"))
                 val_y = np.load(os.path.join(val_folder, f"val-y__{filename_template}"))
-                return Datasets(train_x, train_y, val_x, val_y)
+                return Dataset(train_x, train_y, val_x, val_y)
 
+    
+    @staticmethod
+    def get_col(df: pd.DataFrame, col_name: str) -> Union[None, np.ndarray]:
+        col = None
+        if col_name is not None:
+            col = df[col_name].to_numpy()
+        return col
 
-
-        # Remove time column for later handling
-        time_col = None
-        if time_col_name is not None:
-            time_col = df[time_col_name].to_numpy()
-            df.drop(columns=[time_col_name], inplace=True)
-
-        # Convert to pct change
-        
+    @staticmethod
+    def pct_change(df: pd.DataFrame, custom_pct_change: Dict[str, Callable[[pd.Series], pd.Series]]):
         keys = custom_pct_change.keys()
         for col_name in df:
             new_col = None
@@ -124,23 +103,31 @@ class TSDataPreprocessor():
                 new_col = custom_pct_change[col_name](df[col_name])
             df[col_name] = new_col
         df.dropna(inplace=True)
+        return df
 
-        # Handle time data
-        if time_col is not None:   
-            time_of_day_col = []
-            day_of_week_col = []
-            week_of_year_col = []
-            for val in time_col:
-                timestamp = datetime.fromtimestamp(val / 1000)
-                time_of_day_col.append(timestamp.second + (timestamp.minute * 60) + (timestamp.hour * 60 * 60))
-                day_of_week_col.append(timestamp.weekday())
-                week_of_year_col.append(timestamp.isocalendar().week)
-            
-            df["time_of_day"] = minmax_norm(time_of_day_col)
-            df["day_of_week"] = minmax_norm(day_of_week_col)
-            df["week_of_year"] = minmax_norm(week_of_year_col)
+    @staticmethod
+    def get_data_hash(raw_data: pd.DataFrame):
+        return hashlib.sha256(pd.util.hash_pandas_object(raw_data, index=True).values).hexdigest()[2:8] # First 6 hex chars
 
-        # Add Target (target can be added after since its classification)
+
+    @staticmethod
+    def add_time_data(df: pd.DataFrame, time_col: np.ndarray):
+        time_of_day_col = []
+        day_of_week_col = []
+        week_of_year_col = []
+        for val in time_col:
+            timestamp = datetime.fromtimestamp(val / 1000)
+            time_of_day_col.append(timestamp.second + (timestamp.minute * 60) + (timestamp.hour * 60 * 60))
+            day_of_week_col.append(timestamp.weekday())
+            week_of_year_col.append(timestamp.isocalendar().week)
+        
+        df["time_of_day"] = minmax_norm(time_of_day_col)
+        df["day_of_week"] = minmax_norm(day_of_week_col)
+        df["week_of_year"] = minmax_norm(week_of_year_col)
+        return df
+
+    @staticmethod
+    def add_target(df: pd.DataFrame, target_col_name: str, forecast_period: int):
         target = []
         raw_target_col = df[target_col_name]
         for index, value in raw_target_col.items():
@@ -155,23 +142,19 @@ class TSDataPreprocessor():
                 target.append(np.nan)
         df["target"] = target
         df.dropna(inplace=True)
+        return df
 
-        # Standardise / Normalise (maybe pass these functions in?)
+    @staticmethod
+    def standardise_df(df: pd.DataFrame):
         std_exceptions = ["target", "time_of_day", "day_of_week", "week_of_year"] # Don't std these
         for col in df.columns:
             if col not in std_exceptions:
                 df[col] = standardise(df[col].to_numpy())
-
-
-        # Cleanup (remove NA etc)
-
         df.dropna(inplace=True)
+        return df
 
-        # Convert into numpy sequences
-        # [
-        #    [[sequence1], target1]
-        #    [[sequence2], target2]
-        # ]  
+    @staticmethod
+    def make_sequences(df: pd.DataFrame, sequence_length: int):
         sequences = [] 
         cur_sequence: Deque = deque(maxlen=sequence_length)
         target_index = df.columns.get_loc("target")
@@ -193,9 +176,10 @@ class TSDataPreprocessor():
         
         data_x = np.array(data_x_list)
         data_y = np.array(data_y_list)
+        return data_x, data_y
 
-        # Balance
-        target_index = list(df.columns).index("target")
+    @staticmethod
+    def balance_sequences(data_x: np.ndarray, data_y: np.ndarray):
         group_indices: Dict[str, List[int]] = {}
         groups, counts = np.unique(data_y, return_counts=True)
         for index, target in enumerate(data_y):
@@ -213,21 +197,85 @@ class TSDataPreprocessor():
         
         data_x = data_x[~np.isnan(data_x)].reshape(-1, *data_x.shape[1:])
         data_y = data_y[~np.isnan(data_y)]
-                
+        return data_x, data_y
 
+    @staticmethod
+    def save_dataset(dataset: Dataset, raw_data: pd.DataFrame, df_title: str, sequence_length: int, forecast_period: int):
+        folder = os.path.join(os.environ["workspace"], "data", "preprocessed")
+        data_hash = TSDataPreprocessor.get_data_hash(raw_data)
+        filename = TSDataPreprocessor.get_preprocessed_filename(data_hash, df_title, sequence_length, forecast_period)
+        np.save(os.path.join(folder, "train", f"train-x__{filename}"), dataset.train_x)
+        np.save(os.path.join(folder, "train", f"train-y__{filename}"), dataset.train_y)
+        np.save(os.path.join(folder, "validation", f"val-x__{filename}"), dataset.val_x)
+        np.save(os.path.join(folder, "validation", f"val-y__{filename}"), dataset.val_y)
+
+    def preprocess(self, raw_data: pd.DataFrame, *,
+        target_col_name: str,
+        sequence_length = 100,
+        forecast_period = 10,
+        train_split = 0.8,
+        time_col_name = None,
+        custom_pct_change: Dict[str, Callable[[pd.Series], pd.Series]] = {}
+    ) -> Dataset:
+        """
+        Notes:
+        Somewhere here you will need to save some metadata so you can preprocess new data, not just a dataset.
+        E.g. row standard deviations, means, percentiles etc.
+        
+        Preprocessing Volume:
+        Make it a moving average (between 3 and 200 picked by GA)
+        Then have it as percent change and standardised
+        We best percieve volume as how it changes / slopes. This will best capture this
+
+        All else is standardised
+        """
+
+        dataset = self.load_existing_dataset(raw_data)
+        if dataset is not None:
+            return dataset 
+
+        df = raw_data.copy()
+        df_title = df.style.caption or "~"
+
+        # Remove time column for later handling
+        time_col = self.get_col(df, time_col_name)
+        df.drop(columns=[time_col_name], inplace=True, errors="ignore")
+
+        # Convert to pct change
+        
+        df = self.pct_change(df, custom_pct_change)
+
+        # Handle time data
+
+        if time_col is not None:
+            df = self.add_time_data(df, time_col)
+
+        # Add Target (target can be added after since its classification)
+        df = self.add_target(df, target_col_name, forecast_period)
+
+        # Standardise / Normalise (maybe pass these functions in?)
+        df = self.standardise_df(df)
+
+        # Convert into numpy sequences
+        # [
+        #    [[sequence1], target1]
+        #    [[sequence2], target2]
+        # ]  
+        data_x, data_y = self.make_sequences(df, sequence_length)
+
+        # Balance
+        data_x, data_y = self.balance_sequences(data_x, data_y)
         # Split into training and validation
 
         train_x, val_x = np.split(data_x, [int(train_split * len(data_x))])
         train_y, val_y = np.split(data_y, [int(train_split * len(data_y))])
+        dataset = Dataset(train_x, train_y, val_x, val_y)
 
         # Save data
 
-        folder = os.path.join(os.environ["workspace"], "data", "preprocessed")
-        filename = self.get_preprocessed_filename(data_hash, df_title, sequence_length, forecast_period)
-        np.save(os.path.join(folder, "train", f"train-x__{filename}"), train_x)
-        np.save(os.path.join(folder, "train", f"train-y__{filename}"), train_y)
-        np.save(os.path.join(folder, "validation", f"val-x__{filename}"), val_x)
-        np.save(os.path.join(folder, "validation", f"val-y__{filename}"), val_y)
+        self.save_dataset(dataset, raw_data, df_title, sequence_length, forecast_period)
+
+        
 
         # Shuffle training set 
 
@@ -236,4 +284,4 @@ class TSDataPreprocessor():
         print("Values after preprocessing:")
         print(df)
 
-        return Datasets(train_x, train_y, val_x, val_y)
+        return Dataset(train_x, train_y, val_x, val_y)

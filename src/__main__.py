@@ -41,7 +41,7 @@ def main():
     VOLUME_MA_PERIOD = 5
     preprocessor = TSDataPreprocessor()
     pd.set_option('display.max_columns', None)
-    preprocessor.preprocess(df,
+    datasets = preprocessor.preprocess(df,
         target_col_name="c",
         sequence_length=100,
         forecast_period=10,
