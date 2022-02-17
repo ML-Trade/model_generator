@@ -39,18 +39,16 @@ def main():
     print("Preprocessing Data...")
 
     VOLUME_MA_PERIOD = 5
-    preprocessor = TSDataPreprocessor(
-        df,
+    preprocessor = TSDataPreprocessor()
+    pd.set_option('display.max_columns', None)
+    preprocessor.preprocess(df,
         target_col_name="c",
         sequence_length=100,
         forecast_period=10,
         time_col_name="t",
         custom_pct_change={
             "v": lambda series: moving_average(series, VOLUME_MA_PERIOD).pct_change()
-        }
-    )
-    pd.set_option('display.max_columns', None)
-    preprocessor.preprocess()
+    })
     
 
 

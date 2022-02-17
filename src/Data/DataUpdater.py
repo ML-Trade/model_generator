@@ -66,7 +66,7 @@ class DataUpdater:
         Gets requested historical data and returns as a Pandas dataframe.
         Historical data obtained from polygon.io api for the first time is saved locally in the root data folder 
         """
-        data_folder = os.path.join(os.environ["workspace"], "data")
+        data_folder = os.path.join(os.environ["workspace"], "data", "raw")
         time_delta = get_time_delta(multiplier, measurement)
 
         def get_data_with_file_interval(file_interval: str) -> pd.DataFrame:
