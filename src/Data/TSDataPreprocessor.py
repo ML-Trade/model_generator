@@ -2,6 +2,7 @@ from collections import deque
 from datetime import datetime
 import os
 from typing import Deque, Dict, Callable, List, Union
+from isort import file
 import pandas as pd
 import numpy as np
 from pandas.util import hash_pandas_object
@@ -25,6 +26,13 @@ class PreprocessedFileInfo:
     title: str
     sequence_length: int
     forecast_period: int
+
+@dataclass
+class Datasets:
+    train_x: np.ndarray
+    train_y: np.ndarray
+    val_x: np.ndarray
+    val_y: np.ndarray
 
 class TSDataPreprocessor():
     """
@@ -55,6 +63,10 @@ class TSDataPreprocessor():
         forecast_period = int(split_filename[4].split('-')[-1])
         return PreprocessedFileInfo(dataset_type, data_hash, title, sequence_length, forecast_period)
 
+    @staticmethod
+    def get_preprocessed_filename(data_hash: str, df_title: str, sequence_length: int, forecast_period: int):
+        return f"{data_hash}__{df_title}__SeqLen-{sequence_length}__Forecast-{forecast_period}.npy"
+
 
     
     def preprocess(self, raw_data: pd.DataFrame, *,
@@ -64,7 +76,7 @@ class TSDataPreprocessor():
         train_split = 0.8,
         time_col_name = None,
         custom_pct_change: Dict[str, Callable[[pd.Series], pd.Series]] = {}
-    ):
+    ) -> Datasets:
         """
         Notes:
         Somewhere here you will need to save some metadata so you can preprocess new data, not just a dataset.
@@ -80,11 +92,18 @@ class TSDataPreprocessor():
         df = raw_data.copy()
         df_title = df.style.caption or "~"
         data_hash = hashlib.sha256(pd.util.hash_pandas_object(raw_data, index=True).values).hexdigest()[2:8] # First 6 hex chars
-        for file in glob.glob(os.path.join(os.environ["workspace"], "data", "preprocessed", "train", "*.npy")):
-            file_info = self.deconstruct_filename(file)
+        train_folder = os.path.join(os.environ["workspace"], "data", "preprocessed", "train")
+        val_folder = os.path.join(os.environ["workspace"], "data", "preprocessed", "validation")
+        for file_path in glob.glob(os.path.join(train_folder, "*.npy")):
+            file_info = self.deconstruct_filename(file_path)
             if file_info.data_hash == data_hash:
                 print("Same hash; this dataset has been preprocessed before. Using old version")
-                return
+                filename_template = self.get_preprocessed_filename(file_info.data_hash, file_info.title, file_info.sequence_length, file_info.forecast_period)
+                train_x = np.load(os.path.join(train_folder, f"train-x__{filename_template}"))
+                train_y = np.load(os.path.join(train_folder, f"train-y__{filename_template}"))
+                val_x = np.load(os.path.join(val_folder, f"val-x__{filename_template}"))
+                val_y = np.load(os.path.join(val_folder, f"val-y__{filename_template}"))
+                return Datasets(train_x, train_y, val_x, val_y)
 
 
 
@@ -204,17 +223,17 @@ class TSDataPreprocessor():
         # Save data
 
         folder = os.path.join(os.environ["workspace"], "data", "preprocessed")
-        fileName = f"{data_hash}__{df_title}__SeqLen-{sequence_length}__Forecast-{forecast_period}.npy"
-        np.save(os.path.join(folder, "train", f"train-x__{fileName}"), train_x)
-        np.save(os.path.join(folder, "train", f"train-y__{fileName}"), train_y)
-        np.save(os.path.join(folder, "validation", f"val-x__{fileName}"), val_x)
-        np.save(os.path.join(folder, "validation", f"val-y__{fileName}"), val_y)
+        filename = self.get_preprocessed_filename(data_hash, df_title, sequence_length, forecast_period)
+        np.save(os.path.join(folder, "train", f"train-x__{filename}"), train_x)
+        np.save(os.path.join(folder, "train", f"train-y__{filename}"), train_y)
+        np.save(os.path.join(folder, "validation", f"val-x__{filename}"), val_x)
+        np.save(os.path.join(folder, "validation", f"val-y__{filename}"), val_y)
 
         # Shuffle training set 
 
         # TODO: COME BACK TO SHUFFLE LATER
         # random.shuffle(sequences) # Shuffle sequences to avoid order effects on learning
-
-        
         print("Values after preprocessing:")
         print(df)
+
+        return Datasets(train_x, train_y, val_x, val_y)
