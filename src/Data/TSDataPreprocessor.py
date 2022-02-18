@@ -11,6 +11,9 @@ import glob
 from dataclasses import dataclass
 
 
+# TODO: Make dfs passed to functions not be modified. This can be done with df.copy()
+# TODO: If dataset data folder doesn't exist, create it 
+
 ##  TODO: move this to utils
 def minmax_norm(array: Union[list, np.ndarray]) -> pd.Series:
     np_array = np.array(array)
