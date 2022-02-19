@@ -12,7 +12,6 @@ from dataclasses import dataclass
 
 
 # TODO: Make dfs passed to functions not be modified. This can be done with df.copy()
-# TODO: If dataset data folder doesn't exist, create it 
 
 ##  TODO: move this to utils
 def minmax_norm(array: Union[list, np.ndarray]) -> pd.Series:
@@ -207,10 +206,14 @@ class TSDataPreprocessor():
         folder = os.path.join(os.environ["workspace"], "data", "preprocessed")
         data_hash = TSDataPreprocessor.get_data_hash(raw_data)
         filename = TSDataPreprocessor.get_preprocessed_filename(data_hash, df_title, sequence_length, forecast_period)
-        np.save(os.path.join(folder, "train", f"train-x__{filename}"), dataset.train_x)
-        np.save(os.path.join(folder, "train", f"train-y__{filename}"), dataset.train_y)
-        np.save(os.path.join(folder, "validation", f"val-x__{filename}"), dataset.val_x)
-        np.save(os.path.join(folder, "validation", f"val-y__{filename}"), dataset.val_y)
+        train_folder = os.path.join(folder, "train")
+        val_folder = os.path.join(folder, "validation")
+        os.makedirs(train_folder, exist_ok=True)
+        os.makedirs(val_folder, exist_ok=True)
+        np.save(os.path.join(train_folder, f"train-x__{filename}"), dataset.train_x)
+        np.save(os.path.join(train_folder, f"train-y__{filename}"), dataset.train_y)
+        np.save(os.path.join(val_folder, f"val-x__{filename}"), dataset.val_x)
+        np.save(os.path.join(val_folder, f"val-y__{filename}"), dataset.val_y)
 
     def preprocess(self, raw_data: pd.DataFrame, *,
         target_col_name: str,

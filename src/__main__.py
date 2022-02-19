@@ -49,7 +49,7 @@ def main():
         custom_pct_change={
             "v": lambda series: moving_average(series, VOLUME_MA_PERIOD).pct_change()
     })
-    
+    rnn = RNN()
 
 
 if __name__ == "__main__":
