@@ -1,8 +1,7 @@
 from typing import List, Union
 from .Model import Model
 from enum import Enum
-from keras.layers import LSTM, GRU, CuDNNGRU, CuDNNLSTM
-from keras.models import Sequential
+from keras.layers import LSTM, GRU, CuDNNGRU, CuDNNLSTM, Dense, Input, Bidirectional, Dropout, BatchNormalization
 from Data.TSDataPreprocessor import Dataset
 from tensorflow.python.client import device_lib
 import keras
@@ -53,16 +52,32 @@ class RNN(Model):
         return architecture
     
     def _create_model(self, x_shape: List[int], y_shape: List[int]):
-        model = Sequential()
+        def get_layer_template(num_neurons: int):
+            if not self.is_bidirectional: return self.Architecture(num_neurons, return_sequences=True) 
+            else: return Bidirectional(self.Architecture(num_neurons, return_sequences=True))
+        
+        model_layers = []
+        model_layers.append(Input(shape=x_shape))
         for num_neurons in self.layers:
-            layer_template = self.Architecture()
-            # Finish with Dense(1, activation = "sigmoid") <- or softmax or tanh etc.
+            LayerTemplate = get_layer_template(num_neurons)
+            model_layers.append(LayerTemplate(model_layers[-1]))
+            model_layers.append(Dropout(self.dropout))
+            model_layers.append(BatchNormalization())
 
-            # TODO: BIG THOUGHT
-            # I should create two outputs, one per class (buy | sell). The output is then the probablity
-            # of it being in that class
-            # This means I need to redo the data preprocessing e.g. data_x or data_y
-            # Maybe add a ticket for this in the roadmap
+        num_classes = y_shape[1]
+        last_hidden_layer = model_layers[-1]
+        for i in range(num_classes):
+            model_layers.append(Dense(1, activation="sigmoid")(last_hidden_layer))
+
+        outputs = model_layers[-num_classes:]
+        model = keras.models.Model(inputs = model_layers[0], outputs = outputs)
+        return model
+        
+        # TODO: BIG THOUGHT
+        # I should create two outputs, one per class (buy | sell). The output is then the probablity
+        # of it being in that class
+        # This means I need to redo the data preprocessing e.g. data_x or data_y
+        # Maybe add a ticket for this in the roadmap
 
 
 
