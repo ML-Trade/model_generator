@@ -64,13 +64,22 @@ class RNN(Model):
             model_layers.append(Dropout(self.dropout))
             model_layers.append(BatchNormalization())
 
-        num_classes = y_shape[1]
+        # When y_shape is (n,) it means its a 1 d array of with n items. This would mean there is 1 class
+        # which is stupid thinking about it, but hey, robustness init bruv
+        num_classes = y_shape[1] if len(y_shape) > 1 else 1 
         last_hidden_layer = model_layers[-1]
         for i in range(num_classes):
             model_layers.append(Dense(1, activation="sigmoid")(last_hidden_layer))
 
         outputs = model_layers[-num_classes:]
         model = keras.models.Model(inputs = model_layers[0], outputs = outputs)
+
+        model.compile(
+            loss="sparse_categorical_crossentropy", 
+            optimizer="adam",
+            metrics=["sparse_categorical_crossentropy", "accuracy"]
+        )
+        
         return model
         
         # TODO: BIG THOUGHT

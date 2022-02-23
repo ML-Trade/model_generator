@@ -42,6 +42,10 @@ class TSDataPreprocessor():
     """
     def __init__(self):
         """       
+        THIS IS ONLY FOR BINARY CLASSIFICATION E.G.
+        target = [1, 0, 0, 0]
+        so its the first class
+
         If preprocessed data already exists in the root data folder, it will be loaded, and preprocessing will be skipped
         We will check if it already exists by obtaining a hash of the raw_data dataframe, and comparing it to the hash saved in
         the name of the file. This will mean the same raw data was once passed before.
@@ -160,14 +164,18 @@ class TSDataPreprocessor():
         sequences = [] 
         cur_sequence: Deque = deque(maxlen=sequence_length)
         target_index = df.columns.get_loc("target")
-        for index, value in enumerate(df.to_numpy()):
+        num_classes = len(df["target"].unique())
+        numpy_df = df.to_numpy()
+        for index, value in enumerate(numpy_df):
             # Since value is only considered a single value in the sequence (even though itself is an array), to make it a sequence, we encapsulate it in an array so:
             # sequence1 = [[values1], [values2], [values3]]
             val_without_target = np.concatenate((value[:target_index], value[target_index + 1:]))
             cur_sequence.append(val_without_target) # Append all but target to cur_sequence
             if len(cur_sequence) == sequence_length:
                 seq = list(cur_sequence)
-                sequences.append([np.array(seq), value[target_index]]) # value[-1] is the target        
+                target = [0] * num_classes
+                target[int(value[target_index])] = 1
+                sequences.append([np.array(seq), target]) # value[-1] is the target        
         
 
         data_x_list = []
@@ -182,23 +190,23 @@ class TSDataPreprocessor():
 
     @staticmethod
     def balance_sequences(data_x: np.ndarray, data_y: np.ndarray):
-        group_indices: Dict[str, List[int]] = {}
-        groups, counts = np.unique(data_y, return_counts=True)
-        for index, target in enumerate(data_y):
-            for group in groups:
-                if group not in group_indices: group_indices[group] = []
-                if target == group: group_indices[group].append(index)
+        num_groups = len(data_y[0])
+        group_indices: List[List[int]] = [[]] * num_groups
+        _, counts = np.unique(data_y, return_counts=True)
+        for index, target_tuple in enumerate(data_y):
+            target_index = target_tuple.argmax() # e.g. Find the 1 in [0, 0, 1]
+            group_indices[target_index].append(index)
 
-        for group, indices in group_indices.items():
+        for group, indices in enumerate(group_indices):
             np.random.shuffle(group_indices[group]) # Shuffle removal order
             dif = len(indices) - np.min(counts)
             for i in range(dif):
                 index = group_indices[group].pop()
                 data_x[index] = np.full(data_x[index].shape, np.nan)
-                data_y[index] = np.nan
+                data_y[index] = np.full(data_y[index].shape, np.nan)
         
         data_x = data_x[~np.isnan(data_x)].reshape(-1, *data_x.shape[1:])
-        data_y = data_y[~np.isnan(data_y)]
+        data_y = data_y[~np.isnan(data_y)].reshape(-1, *data_y.shape[1:])
         return data_x, data_y
 
     @staticmethod
