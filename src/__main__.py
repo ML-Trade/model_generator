@@ -41,16 +41,26 @@ def main():
     VOLUME_MA_PERIOD = 5
     preprocessor = TSDataPreprocessor()
     pd.set_option('display.max_columns', None)
-    datasets = preprocessor.preprocess(df,
+    dataset = preprocessor.preprocess(df,
         target_col_name="c",
-        sequence_length=100,
+        sequence_length=80,
         forecast_period=10,
         time_col_name="t",
         custom_pct_change={
             "v": lambda series: moving_average(series, VOLUME_MA_PERIOD).pct_change()
     })
 
-    rnn = RNN()
+    rnn = RNN(
+        layers=[60, 60, 60],
+        x_shape=dataset.train_x.shape,
+        y_shape=dataset.train_y.shape 
+    )
+    rnn.train(
+        dataset,
+        batch_size=1000,
+        max_epochs=3
+    )
+    rnn.predict(dataset)
 
 
 if __name__ == "__main__":

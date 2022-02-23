@@ -1,10 +1,12 @@
-from typing import List, Union
+from typing import List, Tuple, Union
 from .Model import Model
 from enum import Enum
-from keras.layers import LSTM, GRU, CuDNNGRU, CuDNNLSTM, Dense, Input, Bidirectional, Dropout, BatchNormalization
+from keras.layers import LSTM, GRU, CuDNNGRU, CuDNNLSTM, Dense, Input, Bidirectional, Dropout, BatchNormalization, Flatten
+from keras.callbacks import TensorBoard, EarlyStopping
 from Data.TSDataPreprocessor import Dataset
 from tensorflow.python.client import device_lib
 import keras
+import numpy as np
 
 
 class Architecture (Enum):
@@ -15,8 +17,8 @@ ArchitectureType = Union[LSTM, GRU, CuDNNGRU, CuDNNLSTM]
 class RNN(Model):
     def __init__(self, *,
         layers: List[int],
-        x_shape: List[int],
-        y_shape: List[int],
+        x_shape: Tuple[int, ...],
+        y_shape: Tuple[int, ...],
         architecture = Architecture.LSTM.value,
         dropout = 0.1,
         is_bidirectional = False,
@@ -51,33 +53,30 @@ class RNN(Model):
                 architecture = CuDNNLSTM
         return architecture
     
-    def _create_model(self, x_shape: List[int], y_shape: List[int]):
-        def get_layer_template(num_neurons: int):
-            if not self.is_bidirectional: return self.Architecture(num_neurons, return_sequences=True) 
-            else: return Bidirectional(self.Architecture(num_neurons, return_sequences=True))
+    def _create_model(self, x_shape: Tuple[int, ...], y_shape: Tuple[int, ...]):
+        def get_layer_template(num_neurons: int, return_sequences: bool):
+            # Don't return sequences on last one since otherwise dense layer returns multi dimensional tensor, not single output
+            if not self.is_bidirectional: return self.Architecture(num_neurons, return_sequences=return_sequences) 
+            else: return Bidirectional(self.Architecture(num_neurons, return_sequences=return_sequences))
         
         model_layers = []
-        model_layers.append(Input(shape=x_shape))
-        for num_neurons in self.layers:
-            LayerTemplate = get_layer_template(num_neurons)
+        model_layers.append(Input(shape=(x_shape[1:]))) # input_shape[0] is just len(x_shape)
+        for index, num_neurons in enumerate(self.layers):
+            return_sequences = index < len(self.layers) - 1
+            LayerTemplate = get_layer_template(num_neurons, return_sequences)
             model_layers.append(LayerTemplate(model_layers[-1]))
-            model_layers.append(Dropout(self.dropout))
-            model_layers.append(BatchNormalization())
+            model_layers.append(Dropout(self.dropout)(model_layers[-1]))
+            model_layers.append(BatchNormalization()(model_layers[-1]))
 
-        # When y_shape is (n,) it means its a 1 d array of with n items. This would mean there is 1 class
-        # which is stupid thinking about it, but hey, robustness init bruv
-        num_classes = y_shape[1] if len(y_shape) > 1 else 1 
-        last_hidden_layer = model_layers[-1]
-        for i in range(num_classes):
-            model_layers.append(Dense(1, activation="sigmoid")(last_hidden_layer))
+        num_classes = y_shape[1]
+        model_layers.append(Dense(num_classes, activation="sigmoid")(model_layers[-1]))
 
-        outputs = model_layers[-num_classes:]
-        model = keras.models.Model(inputs = model_layers[0], outputs = outputs)
+        model = keras.models.Model(inputs = model_layers[0], outputs = model_layers[-1])
 
         model.compile(
-            loss="sparse_categorical_crossentropy", 
+            loss=["categorical_crossentropy"], 
             optimizer="adam",
-            metrics=["sparse_categorical_crossentropy", "accuracy"]
+            metrics=["categorical_crossentropy", "accuracy"]
         )
         
         return model
@@ -96,10 +95,29 @@ class RNN(Model):
         early_stop_patience = 6,
         batch_size = 1
     ):
-        pass
+        early_stop = EarlyStopping(monitor='val_loss', patience=early_stop_patience, restore_best_weights=True)
+        training_history = self.model.fit(
+            x=dataset.train_x,
+            y=dataset.train_y,
+            batch_size=batch_size,
+            epochs=max_epochs,
+            validation_data=(dataset.val_x, dataset.val_y),
+            # callbacks=[tensorboard, early_stop],
+            callbacks=[early_stop],
+            shuffle=True
+        )
+
+        score = self.model.evaluate(dataset.val_x, dataset.val_y, verbose=0)
+        score = {out: score[i] for i, out in enumerate(self.model.metrics_names)}
+        print('Scores:', score)
     
-    def predict(self):
-        return super().predict()
+    def predict(self, dataset: Dataset):
+        predictions = self.model.predict(dataset.val_x)
+        correct = 0
+        for index, pred in enumerate(predictions):
+            if np.argmax([pred[0], pred[1]]) == np.argmax([dataset.val_y[index][0], dataset.val_y[index][1]]): correct += 1
+        print(f"Actual accuracy: {correct / len(dataset.val_y)}")
+
     
     def load_data(self):
         pass
