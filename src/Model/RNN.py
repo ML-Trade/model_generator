@@ -1,25 +1,20 @@
 from typing import List, Tuple, Union
 from .Model import Model
 from enum import Enum
-from keras.layers import LSTM, GRU, CuDNNGRU, CuDNNLSTM, Dense, Input, Bidirectional, Dropout, BatchNormalization, Flatten
+from keras.layers import LSTM, GRU, Dense, Input, Bidirectional, Dropout, BatchNormalization
 from keras.callbacks import TensorBoard, EarlyStopping
 from Data.TSDataPreprocessor import Dataset
-from tensorflow.python.client import device_lib
 import keras
 import numpy as np
 
 
-class Architecture (Enum):
-    LSTM = LSTM
-    GRU = GRU
-
-ArchitectureType = Union[LSTM, GRU, CuDNNGRU, CuDNNLSTM]
+ArchitectureType = Union[LSTM, GRU]
 class RNN(Model):
     def __init__(self, *,
         layers: List[int],
         x_shape: Tuple[int, ...],
         y_shape: Tuple[int, ...],
-        architecture = Architecture.LSTM.value,
+        architecture: ArchitectureType = LSTM,
         dropout = 0.1,
         is_bidirectional = False,
     ) -> None:
@@ -28,7 +23,7 @@ class RNN(Model):
         """
         super().__init__()
         # TODO: Test if this is actually needed in newer versions of Tensorflow
-        self.Architecture: ArchitectureType = self._use_gpu_if_available(architecture)
+        self.Architecture = architecture
         self.is_bidirectional = is_bidirectional
         self.dropout = dropout
         self.layers = layers
@@ -43,16 +38,6 @@ class RNN(Model):
         """
         pass
 
-    def _use_gpu_if_available(self, architecture: Architecture):
-        local_devices = device_lib.list_local_devices()
-        gpus = [x.name for x in local_devices if x.device_type == 'GPU']
-        if len(gpus) != 0:
-            if architecture == GRU:
-                architecture = CuDNNGRU
-            elif architecture == LSTM:
-                architecture = CuDNNLSTM
-        return architecture
-    
     def _create_model(self, x_shape: Tuple[int, ...], y_shape: Tuple[int, ...]):
         def get_layer_template(num_neurons: int, return_sequences: bool):
             # Don't return sequences on last one since otherwise dense layer returns multi dimensional tensor, not single output
@@ -81,13 +66,6 @@ class RNN(Model):
         
         return model
         
-        # TODO: BIG THOUGHT
-        # I should create two outputs, one per class (buy | sell). The output is then the probablity
-        # of it being in that class
-        # This means I need to redo the data preprocessing e.g. data_x or data_y
-        # Maybe add a ticket for this in the roadmap
-
-
 
     def train(self, dataset: Dataset,
         *,
@@ -96,6 +74,8 @@ class RNN(Model):
         batch_size = 1
     ):
         early_stop = EarlyStopping(monitor='val_loss', patience=early_stop_patience, restore_best_weights=True)
+        # tensorboard = TensorBoard(log_dir=f"{os.environ['WORKSPACE']}/logs/{self.seq_info}__{self.get_model_info_str()}__{datetime.now().timestamp()}")
+
         training_history = self.model.fit(
             x=dataset.train_x,
             y=dataset.train_y,
