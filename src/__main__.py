@@ -1,10 +1,12 @@
 from datetime import datetime
-from Model import RNN
+from typing import List
+from Model import RNN, ModelFileInfo
 from os import environ, path
 from Data import DataUpdater, TSDataPreprocessor
 import numpy as np
 import pandas as pd
-
+import os
+import glob
 
 
 ## TODO: Move me to utils
@@ -14,6 +16,18 @@ def moving_average(series: pd.Series, period: int) -> pd.Series :
     """
     return series.rolling(period, center=False).mean()
     
+
+def get_filepath():
+    models_folder = os.path.join(os.environ["workspace"], "models")
+    os.makedirs(models_folder, exist_ok=True)
+    all_file_info: List[ModelFileInfo] = []
+    for file_path in glob.glob(os.path.join(models_folder, "*.h5")):
+        file_info = RNN.deconstruct_model_path(file_path)
+        all_file_info.append(file_info)
+    all_file_info.sort(key=lambda x: x.timestamp)
+    return all_file_info[-1].filepath
+
+
 
 def main():
     file_path = path.dirname(__file__)
@@ -60,7 +74,10 @@ def main():
         batch_size=1000,
         max_epochs=3
     )
-    rnn.predict(dataset)
+    # rnn.predict(dataset)
+    rnn.save_model()
+    filepath = get_filepath()
+    rnn.load_model(filepath)
 
 
 if __name__ == "__main__":

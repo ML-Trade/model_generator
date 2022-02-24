@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from datetime import date, datetime
+from platform import architecture
 from typing import List, Tuple, Union
 from .Model import Model
 from enum import Enum
@@ -6,10 +9,30 @@ from keras.callbacks import TensorBoard, EarlyStopping
 from Data.TSDataPreprocessor import Dataset
 import keras
 import numpy as np
+import os
 
+@dataclass
+class ModelFileInfo:
+    filepath: str
+    architecture: str
+    layers: str
+    loss: float
+    timestamp: datetime
 
 ArchitectureType = Union[LSTM, GRU]
 class RNN(Model):
+
+    @staticmethod
+    def deconstruct_model_path(filepath: str):
+        filename_no_path = os.path.basename(filepath)
+        filename_no_ext = os.path.splitext(filename_no_path)[0]
+        split_filename = filename_no_ext.split("__")
+        architecture = split_filename[0]
+        layers = split_filename[1]
+        loss = split_filename[2].split('-')[1]
+        timestamp = datetime.fromisoformat(split_filename[3].replace(";", ":"))
+        return ModelFileInfo(filepath, architecture, layers, loss, timestamp)
+
     def __init__(self, *,
         layers: List[int],
         x_shape: Tuple[int, ...],
@@ -28,15 +51,10 @@ class RNN(Model):
         self.dropout = dropout
         self.layers = layers
         self.model = self._create_model(x_shape, y_shape)
+        self.score = {
+            "loss": np.inf
+        }
 
-    def load_model(filename: str):
-        """
-        The file passed is a tarball. It contains the metadata as well as the model / weights files.
-        This function extracts the tarball into the temp directory defined by tempfile.gettempdir()
-        (failing this we could just make a temp directory, but we then have to worry about cleanup).
-        We use these files to init the model.
-        """
-        pass
 
     def _create_model(self, x_shape: Tuple[int, ...], y_shape: Tuple[int, ...]):
         def get_layer_template(num_neurons: int, return_sequences: bool):
@@ -88,8 +106,8 @@ class RNN(Model):
         )
 
         score = self.model.evaluate(dataset.val_x, dataset.val_y, verbose=0)
-        score = {out: score[i] for i, out in enumerate(self.model.metrics_names)}
-        print('Scores:', score)
+        self.score = {out: score[i] for i, out in enumerate(self.model.metrics_names)}
+        print('Scores:', self.score)
     
     def predict(self, dataset: Dataset):
         predictions = self.model.predict(dataset.val_x)
@@ -98,9 +116,16 @@ class RNN(Model):
             if np.argmax([pred[0], pred[1]]) == np.argmax([dataset.val_y[index][0], dataset.val_y[index][1]]): correct += 1
         print(f"Actual accuracy: {correct / len(dataset.val_y)}")
 
-    
-    def load_data(self):
-        pass
+
+    def load_model(self, filepath: str):
+        self.model = keras.models.load_model(filepath)
+        print(f"Successfully loaded from {filepath}")
+        """
+        The file passed is a tarball. It contains the metadata as well as the model / weights files.
+        This function extracts the tarball into the temp directory defined by tempfile.gettempdir()
+        (failing this we could just make a temp directory, but we then have to worry about cleanup).
+        We use these files to init the model.
+        """
 
     def save_model(self):
         """
@@ -110,4 +135,9 @@ class RNN(Model):
         and date/time. Associated files will include metadata such as number of layers,
         each later shape, other stats etc. 
         """
-        pass
+        models_folder = os.path.join(os.environ["workspace"], "models")
+        os.makedirs(models_folder, exist_ok=True)
+        layer_text = "-".join([str(x) for x in self.layers])
+        timestamp = datetime.now().isoformat(timespec="seconds").replace(":", ";")
+        filename = f"RNN__{layer_text}__Loss-{self.score['loss']:.4f}__{timestamp}.h5"
+        self.model.save(os.path.join(models_folder, filename), save_format="h5")
