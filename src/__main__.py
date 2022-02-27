@@ -69,13 +69,13 @@ def main():
         x_shape=dataset.train_x.shape,
         y_shape=dataset.train_y.shape 
     )
-    rnn.train(
-        dataset,
-        batch_size=1000,
-        max_epochs=3
-    )
+    # rnn.train(
+    #     dataset,
+    #     batch_size=1000,
+    #     max_epochs=3
+    # )
     # rnn.predict(dataset)
-    rnn.save_model()
+    rnn.save_model(dataset)
     filepath = get_filepath()
     rnn.load_model(filepath)
 

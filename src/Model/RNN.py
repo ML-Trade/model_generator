@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date, datetime
+from msilib.schema import Error
 from platform import architecture
 from typing import List, Tuple, Union
 from .Model import Model
@@ -31,7 +32,7 @@ class RNN(Model):
         layers = split_filename[1]
         loss = split_filename[2].split('-')[1]
         timestamp = datetime.fromisoformat(split_filename[3].replace(";", ":"))
-        return ModelFileInfo(filepath, architecture, layers, loss, timestamp)
+        return ModelFileInfo(filepath, architecture, layers, float(loss), timestamp)
 
     def __init__(self, *,
         layers: List[int],
@@ -127,7 +128,7 @@ class RNN(Model):
         We use these files to init the model.
         """
 
-    def save_model(self):
+    def save_model(self, dataset: Dataset):
         """
         Save model locally
         
@@ -135,9 +136,21 @@ class RNN(Model):
         and date/time. Associated files will include metadata such as number of layers,
         each later shape, other stats etc. 
         """
+        if dataset.x_norm_functions is None:
+            raise Exception("dataset.x_norm_functions required to save model metadata")
+        dataset_means = []
+        dataset_stds = []
+
         models_folder = os.path.join(os.environ["workspace"], "models")
         os.makedirs(models_folder, exist_ok=True)
         layer_text = "-".join([str(x) for x in self.layers])
         timestamp = datetime.now().isoformat(timespec="seconds").replace(":", ";")
         filename = f"RNN__{layer_text}__Loss-{self.score['loss']:.4f}__{timestamp}.h5"
         self.model.save(os.path.join(models_folder, filename), save_format="h5")
+        self.model.summary()
+        for layer in self.model.layers:
+            print(layer.__class__.__name__)
+            print(layer.input_shape)
+            print(layer.output_shape)
+            if isinstance(layer, Dropout):
+                print(layer.get_config())

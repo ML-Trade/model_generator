@@ -1,7 +1,7 @@
 from collections import deque
 from datetime import datetime
 import os
-from typing import Deque, Dict, Callable, List, Union
+from typing import Deque, Dict, Callable, List, Optional, Union
 from isort import file
 import pandas as pd
 import numpy as np
@@ -35,6 +35,8 @@ class Dataset:
     train_y: np.ndarray
     val_x: np.ndarray
     val_y: np.ndarray
+    x_norm_functions: Optional[dict] = None
+    y_classes: Optional[list[str]] = None
 
 class TSDataPreprocessor():
     """
@@ -225,11 +227,11 @@ class TSDataPreprocessor():
 
     def preprocess(self, raw_data: pd.DataFrame, *,
         target_col_name: str,
+        col_config: ColumnConfig,
         sequence_length = 100,
         forecast_period = 10,
         train_split = 0.8,
         time_col_name = None,
-        custom_pct_change: Dict[str, Callable[[pd.Series], pd.Series]] = {}
     ) -> Dataset:
         """
         Notes:
@@ -243,6 +245,8 @@ class TSDataPreprocessor():
 
         All else is standardised
         """
+        ## TODO: Reorder col_config to be in same order as raw_data
+        ## TODO: col_config documentation
 
         dataset = self.load_existing_dataset(raw_data)
         if dataset is not None:
@@ -298,4 +302,10 @@ class TSDataPreprocessor():
         print("Values after preprocessing:")
         print(df)
 
-        return Dataset(train_x, train_y, val_x, val_y)
+        norm_functions: dict = {x: {"type": "std"} for x in df.columns}
+        norm_functions["v"] = {
+            "type": "ma_std",
+            "period": 20
+        }
+        print(norm_functions)
+        return Dataset(train_x, train_y, val_x, val_y, norm_functions, y_classes=["SELL", "BUY"])
