@@ -22,7 +22,7 @@ class ColumnConfig:
             name: "SOME_NAME",
             norm_function: "std | ma_std | minmax | time",
             period: 69,
-            class_meanings: ["SELL", "BUY"],
+            class_meanings: ["BUY", "SELL"],
             is_target: false
         },
         ...

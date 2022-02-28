@@ -10,7 +10,7 @@ import hashlib
 import glob
 from dataclasses import dataclass
 
-from Data import ColumnConfig
+from Data.ColumnConfig import ColumnConfig, NormFunction
 
 
 # TODO: Make dfs passed to functions not be modified. This can be done with df.copy()
@@ -37,8 +37,6 @@ class Dataset:
     train_y: np.ndarray
     val_x: np.ndarray
     val_y: np.ndarray
-    x_norm_functions: Optional[dict] = None
-    y_classes: Optional[list[str]] = None
 
 class TSDataPreprocessor():
     """
@@ -144,10 +142,10 @@ class TSDataPreprocessor():
             try:
                 if value < raw_target_col[index + forecast_period]:
                     ## TODO: Enum or globalise this?
-                    target.append(1.0) # Buy
+                    target.append(0.0) # Buy
                 else:
                     # NOTE: This may have a slight bias to selling; if theyre equal target is sell
-                    target.append(0.0) # Sell
+                    target.append(1.0) # Sell
             except:
                 target.append(np.nan)
         df["target"] = target
@@ -155,17 +153,8 @@ class TSDataPreprocessor():
         return df
 
     @staticmethod
-    def standardise_df(df: pd.DataFrame):
-        std_exceptions = ["target", "time_of_day", "day_of_week", "week_of_year"] # Don't std these
-        for col in df.columns:
-            if col not in std_exceptions:
-                df[col] = standardise(df[col].to_numpy())
-        df.dropna(inplace=True)
-        return df
-
-    @staticmethod
     def make_sequences(df: pd.DataFrame, sequence_length: int):
-        sequences = [] 
+        sequences: list = [] 
         cur_sequence: Deque = deque(maxlen=sequence_length)
         target_index = df.columns.get_loc("target")
         num_classes = len(df["target"].unique())
@@ -227,13 +216,67 @@ class TSDataPreprocessor():
         np.save(os.path.join(val_folder, f"val-x__{filename}"), dataset.val_x)
         np.save(os.path.join(val_folder, f"val-y__{filename}"), dataset.val_y)
 
+
+    @staticmethod
+    def std_normalisation(df: pd.DataFrame, col_name: str) -> pd.DataFrame:
+        df[col_name] = df[col_name].pct_change()
+        df.dropna(inplace=True)
+        df[col_name] = standardise(df[col_name].to_numpy())
+        df.dropna(inplace=True)
+        return df
+
+    @staticmethod
+    def ma_std_normalisation(df: pd.DataFrame, col_name: str, period: int) -> pd.DataFrame:
+        df[col_name] = df[col_name].rolling(period, center=False).mean()
+        print(df[col_name])
+        df[col_name] = df[col_name].pct_change()
+        df.dropna(inplace=True)
+        print(df[col_name])
+        df[col_name] = standardise(df[col_name].to_numpy())
+        print(df[col_name])
+        print(df)
+        df.dropna(inplace=True)
+        
+        return df
+
+    @staticmethod
+    def minmax_normalisation(df: pd.DataFrame, col_name: str) -> pd.DataFrame:
+        df[col_name] = minmax_norm(df[col_name].to_numpy())
+        df.dropna(inplace=True)
+        return df
+
+    @staticmethod
+    def time_normalisation(df: pd.DataFrame, col_name: str) -> pd.DataFrame:
+        time_data = df[col_name].to_numpy()
+        df = TSDataPreprocessor.add_time_data(df, time_data)
+        df.drop(columns=col_name, inplace=True, errors="ignore")
+        df.dropna(inplace=True)
+        return df
+
+
+    @staticmethod
+    def normalisation(df: pd.DataFrame, col_config: ColumnConfig) -> pd.DataFrame:
+        config = col_config.to_dict()
+        for col_name, value in config.items():
+            lendf = len(df)
+            if col_name == "target": continue
+            if value["norm_function"] == NormFunction.STD:
+                df = TSDataPreprocessor.std_normalisation(df, col_name)
+            if value["norm_function"] == NormFunction.MA_STD:
+                df = TSDataPreprocessor.ma_std_normalisation(df, col_name, value["period"])
+            if value["norm_function"] == NormFunction.MINMAX:
+                df = TSDataPreprocessor.minmax_normalisation(df, col_name)
+            if value["norm_function"] == NormFunction.TIME:
+                df = TSDataPreprocessor.time_normalisation(df, col_name)
+        return df
+        
+        
+
     def preprocess(self, raw_data: pd.DataFrame, *,
-        target_col_name: str,
         col_config: ColumnConfig,
         sequence_length = 100,
         forecast_period = 10,
-        train_split = 0.8,
-        time_col_name = None,
+        train_split = 0.8
     ) -> Dataset:
         """
         Notes:
@@ -257,24 +300,12 @@ class TSDataPreprocessor():
         df = raw_data.copy()
         df_title = df.style.caption or "~"
 
-        # Remove time column for later handling
-        time_col = self.get_col(df, time_col_name)
-        df.drop(columns=[time_col_name], inplace=True, errors="ignore")
-
-        # Convert to pct change
-        
-        df = self.pct_change(df, custom_pct_change)
-
-        # Handle time data
-
-        if time_col is not None:
-            df = self.add_time_data(df, time_col)
-
         # Add Target (target can be added after since its classification)
-        df = self.add_target(df, target_col_name, forecast_period)
+        df = self.add_target(df, col_config.target_column, forecast_period)
 
-        # Standardise / Normalise (maybe pass these functions in?)
-        df = self.standardise_df(df)
+        # Remove time column for later handling
+        self.normalisation(df, col_config)
+
 
         # Convert into numpy sequences
         # [
@@ -303,11 +334,4 @@ class TSDataPreprocessor():
         # random.shuffle(sequences) # Shuffle sequences to avoid order effects on learning
         print("Values after preprocessing:")
         print(df)
-
-        norm_functions: dict = {x: {"type": "std"} for x in df.columns}
-        norm_functions["v"] = {
-            "type": "ma_std",
-            "period": 20
-        }
-        print(norm_functions)
-        return Dataset(train_x, train_y, val_x, val_y, norm_functions, y_classes=["SELL", "BUY"])
+        return Dataset(train_x, train_y, val_x, val_y)

@@ -54,36 +54,31 @@ def main():
     print("Preprocessing Data...")
 
     VOLUME_MA_PERIOD = 5
-    # preprocessor = TSDataPreprocessor()
-    # pd.set_option('display.max_columns', None)
-    # dataset = preprocessor.preprocess(df,
-    #     target_col_name="c",
-    #     sequence_length=80,
-    #     forecast_period=10,
-    #     time_col_name="t",
-    #     custom_pct_change={
-    #         "v": lambda series: moving_average(series, VOLUME_MA_PERIOD).pct_change()
-    # })
+    preprocessor = TSDataPreprocessor()
+    pd.set_option('display.max_columns', None)
+    col_config = ColumnConfig(df.columns, target_column="c", class_meanings=["BUY", "SELL"])
+    col_config.set_norm_function("t", NormFunction.TIME)
+    col_config.set_norm_function("v", NormFunction.MA_STD, {"period": VOLUME_MA_PERIOD})
+    dataset = preprocessor.preprocess(df,
+        col_config=col_config,
+        sequence_length=80,
+        forecast_period=10,
+    )
 
-    # rnn = RNN(
-    #     layers=[60, 60, 60],
-    #     x_shape=dataset.train_x.shape,
-    #     y_shape=dataset.train_y.shape 
-    # )
-    # rnn.train(
-    #     dataset,
-    #     batch_size=1000,
-    #     max_epochs=3
-    # )
-    # rnn.predict(dataset)
+    rnn = RNN(
+        layers=[60, 60, 60],
+        x_shape=dataset.train_x.shape,
+        y_shape=dataset.train_y.shape 
+    )
+    rnn.train(
+        dataset,
+        batch_size=1000,
+        max_epochs=3
+    )
+    rnn.predict(dataset)
     # rnn.save_model(dataset)
     # filepath = get_filepath()
     # rnn.load_model(filepath)
-    col_config = ColumnConfig(df.columns, target_column="c", class_meanings=["SELL", "BUY"])
-    col_config.set_default_norm_function(NormFunction.MA_STD, {"period": 10})
-    print(col_config.to_dict())
-    print(ColumnConfig.from_json(col_config.to_json()).to_dict())
-
 
 
 if __name__ == "__main__":
