@@ -29,6 +29,10 @@ ArchitectureType = Union[LSTM, GRU]
 def get_architecture_name(architecture_type: ArchitectureType):
     if architecture_type == LSTM: return "LSTM"
     if architecture_type == GRU: return "GRU"
+
+def get_architecture_from_name(name: str):
+    if name == "LSTM": return LSTM
+    if name == "GRU": return GRU
 class RNN(Model):
 
     @staticmethod
@@ -127,19 +131,43 @@ class RNN(Model):
             if np.argmax([pred[0], pred[1]]) == np.argmax([dataset.val_y[index][0], dataset.val_y[index][1]]): correct += 1
         print(f"Actual accuracy: {correct / len(dataset.val_y)}")
 
-
-    def load_model(self, filepath: str):
-        self.model = keras.models.load_model(filepath)
-        print(f"Successfully loaded from {filepath}")
+    @staticmethod
+    def load_model(filepath: str):
         """
         The file passed is a tarball. It contains the metadata as well as the model / weights files.
         This function extracts the tarball into the temp directory defined by tempfile.gettempdir()
         (failing this we could just make a temp directory, but we then have to worry about cleanup).
         We use these files to init the model.
         """
+        with tempfile.TemporaryDirectory() as temp_dirname:
+            with tarfile.open(filepath, "r") as tar:
+                tar.extractall(temp_dirname)
+                
+            model_path = os.path.join(temp_dirname, "model.h5")
+            metadata_path = os.path.join(temp_dirname, "metadata.json")
+            
+            metadata_file = open(metadata_path)
+            metadata = json.load(metadata_file)
+            metadata_file.close()
 
-    def save_model(self, col_config: ColumnConfig):
+            architecture = get_architecture_from_name(metadata["architecture"])
+            model = RNN(
+                layers=metadata["layers"],
+                x_shape=metadata["x_shape"],
+                y_shape=metadata["y_shape"],
+                architecture=architecture,
+                dropout=metadata["dropout"],
+                is_bidirectional=metadata["is_bidirectional"]
+            )
+            model.model = keras.models.load_model(model_path)
+        print(f"Successfully loaded from {filepath}")
+        return model
+
+
+    def save_model(self, col_config: ColumnConfig) -> str:
         """
+        RETURNS the file path of the tarball saved
+        
         Save model locally
         
         Saved model's filenames will include their model type (e.g. RNN) their fitness rating,
@@ -170,10 +198,11 @@ class RNN(Model):
             with open(metadata_path, "w") as json_file:
                 json_file.write(metadata_json)
 
-            with tarfile.open(os.path.join(models_folder, tar_filename), "w") as tar:
+            tar_path = os.path.join(models_folder, tar_filename)
+            with tarfile.open(tar_path, "w") as tar:
                 tar.add(model_path, arcname="model.h5")
                 tar.add(metadata_path, arcname="metadata.json")
-        
+            return tar_path
 
         
 

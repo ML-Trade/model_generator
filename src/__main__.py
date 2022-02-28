@@ -76,7 +76,10 @@ def main():
     #     max_epochs=3
     # )
     # rnn.predict(dataset)
-    rnn.save_model(col_config)
+    model_path = rnn.save_model(col_config)
+    new_model = RNN.load_model(model_path)
+
+
     # filepath = get_filepath()
     # rnn.load_model(filepath)
 
