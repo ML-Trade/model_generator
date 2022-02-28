@@ -1,8 +1,11 @@
 from dataclasses import dataclass
 from datetime import date, datetime
+import json
 from msilib.schema import Error
 from platform import architecture
-from typing import List, Tuple, Union
+from typing import Dict, List, Tuple, Union
+
+from Data.ColumnConfig import ColumnConfig
 from .Model import Model
 from enum import Enum
 from keras.layers import LSTM, GRU, Dense, Input, Bidirectional, Dropout, BatchNormalization
@@ -11,6 +14,8 @@ from Data.TSDataPreprocessor import Dataset
 import keras
 import numpy as np
 import os
+import tarfile
+import tempfile
 
 @dataclass
 class ModelFileInfo:
@@ -21,6 +26,9 @@ class ModelFileInfo:
     timestamp: datetime
 
 ArchitectureType = Union[LSTM, GRU]
+def get_architecture_name(architecture_type: ArchitectureType):
+    if architecture_type == LSTM: return "LSTM"
+    if architecture_type == GRU: return "GRU"
 class RNN(Model):
 
     @staticmethod
@@ -52,6 +60,8 @@ class RNN(Model):
         self.dropout = dropout
         self.layers = layers
         self.model = self._create_model(x_shape, y_shape)
+        self.x_shape = x_shape
+        self.y_shape = y_shape
         self.score = {
             "loss": np.inf
         }
@@ -128,7 +138,7 @@ class RNN(Model):
         We use these files to init the model.
         """
 
-    def save_model(self, dataset: Dataset):
+    def save_model(self, col_config: ColumnConfig):
         """
         Save model locally
         
@@ -136,21 +146,35 @@ class RNN(Model):
         and date/time. Associated files will include metadata such as number of layers,
         each later shape, other stats etc. 
         """
-        if dataset.x_norm_functions is None:
-            raise Exception("dataset.x_norm_functions required to save model metadata")
-        dataset_means = []
-        dataset_stds = []
 
-        models_folder = os.path.join(os.environ["workspace"], "models")
-        os.makedirs(models_folder, exist_ok=True)
-        layer_text = "-".join([str(x) for x in self.layers])
-        timestamp = datetime.now().isoformat(timespec="seconds").replace(":", ";")
-        filename = f"RNN__{layer_text}__Loss-{self.score['loss']:.4f}__{timestamp}.h5"
-        self.model.save(os.path.join(models_folder, filename), save_format="h5")
-        self.model.summary()
-        for layer in self.model.layers:
-            print(layer.__class__.__name__)
-            print(layer.input_shape)
-            print(layer.output_shape)
-            if isinstance(layer, Dropout):
-                print(layer.get_config())
+        metadata: dict = {}
+        metadata["col_config"] = json.loads(col_config.to_json()) # I need a dict but in the json format
+        metadata["layers"] = self.layers
+        metadata["architecture"] = get_architecture_name(self.Architecture)
+        metadata["dropout"] = self.dropout
+        metadata["is_bidirectional"] = self.is_bidirectional
+        metadata["x_shape"] = self.x_shape
+        metadata["y_shape"] = self.y_shape
+        metadata_json = json.dumps(metadata, indent=2)
+        
+        with tempfile.TemporaryDirectory() as temp_dirname:
+            models_folder = os.path.join(os.environ["workspace"], "models")
+            os.makedirs(models_folder, exist_ok=True)
+            layer_text = "-".join([str(x) for x in self.layers])
+            timestamp = datetime.now().isoformat(timespec="seconds").replace(":", ";")
+            tar_filename = f"RNN__{layer_text}__Loss-{self.score['loss']:.4f}__{timestamp}.tar"
+
+            model_path = os.path.join(temp_dirname, "model.h5")
+            metadata_path = os.path.join(temp_dirname, "metadata.json")
+            self.model.save(model_path, save_format="h5")
+            with open(metadata_path, "w") as json_file:
+                json_file.write(metadata_json)
+
+            with tarfile.open(os.path.join(models_folder, tar_filename), "w") as tar:
+                tar.add(model_path, arcname="model.h5")
+                tar.add(metadata_path, arcname="metadata.json")
+        
+
+        
+
+        

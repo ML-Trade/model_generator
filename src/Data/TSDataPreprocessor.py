@@ -20,8 +20,10 @@ def minmax_norm(array: Union[list, np.ndarray]) -> pd.Series:
     np_array = np.array(array)
     return pd.Series((np_array - np.min(np_array)) / (np.max(array) - np.min(array)))
 
-def standardise(arr: np.ndarray):
-    return (arr - np.mean(arr)) / np.std(arr)
+def standardise(arr: np.ndarray, mean: Optional[float] = None, std: Optional[float] = None):
+    mean = mean or np.mean(arr)
+    std = std or np.std(arr)
+    return (arr - mean) / std
 
 @dataclass
 class PreprocessedFileInfo:
@@ -218,23 +220,27 @@ class TSDataPreprocessor():
 
 
     @staticmethod
-    def std_normalisation(df: pd.DataFrame, col_name: str) -> pd.DataFrame:
+    def std_normalisation(df: pd.DataFrame, col_name: str, col_config: ColumnConfig) -> pd.DataFrame:
         df[col_name] = df[col_name].pct_change()
         df.dropna(inplace=True)
-        df[col_name] = standardise(df[col_name].to_numpy())
+        np_data = df[col_name].to_numpy()
+        mean = np.mean(np_data)
+        std = np.std(np_data)
+        col_config.add_args(col_name, {"mean": mean, "std": std})
+        df[col_name] = standardise(np_data, mean, std)
         df.dropna(inplace=True)
         return df
 
     @staticmethod
-    def ma_std_normalisation(df: pd.DataFrame, col_name: str, period: int) -> pd.DataFrame:
+    def ma_std_normalisation(df: pd.DataFrame, col_name: str, period: int, col_config: ColumnConfig) -> pd.DataFrame:
         df[col_name] = df[col_name].rolling(period, center=False).mean()
-        print(df[col_name])
         df[col_name] = df[col_name].pct_change()
         df.dropna(inplace=True)
-        print(df[col_name])
-        df[col_name] = standardise(df[col_name].to_numpy())
-        print(df[col_name])
-        print(df)
+        np_data = df[col_name].to_numpy()
+        mean = np.mean(np_data)
+        std = np.std(np_data)
+        col_config.add_args(col_name, {"mean": mean, "std": std})
+        df[col_name] = standardise(np_data, mean, std)
         df.dropna(inplace=True)
         
         return df
@@ -258,12 +264,11 @@ class TSDataPreprocessor():
     def normalisation(df: pd.DataFrame, col_config: ColumnConfig) -> pd.DataFrame:
         config = col_config.to_dict()
         for col_name, value in config.items():
-            lendf = len(df)
             if col_name == "target": continue
             if value["norm_function"] == NormFunction.STD:
-                df = TSDataPreprocessor.std_normalisation(df, col_name)
+                df = TSDataPreprocessor.std_normalisation(df, col_name, col_config)
             if value["norm_function"] == NormFunction.MA_STD:
-                df = TSDataPreprocessor.ma_std_normalisation(df, col_name, value["period"])
+                df = TSDataPreprocessor.ma_std_normalisation(df, col_name, value["period"], col_config)
             if value["norm_function"] == NormFunction.MINMAX:
                 df = TSDataPreprocessor.minmax_normalisation(df, col_name)
             if value["norm_function"] == NormFunction.TIME:
@@ -293,9 +298,10 @@ class TSDataPreprocessor():
         ## TODO: Reorder col_config to be in same order as raw_data
         ## TODO: col_config documentation
 
-        dataset = self.load_existing_dataset(raw_data)
-        if dataset is not None:
-            return dataset 
+        #TODO: THIS DOESN'T CURRENTLY WORK. MEANS AND STD AREN'T ADDED TO COL_CONFIG AMONG OTHER THINGS
+        # dataset = self.load_existing_dataset(raw_data)
+        # if dataset is not None:
+        #     return dataset 
 
         df = raw_data.copy()
         df_title = df.style.caption or "~"

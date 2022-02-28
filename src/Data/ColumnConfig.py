@@ -21,9 +21,12 @@ class ColumnConfig:
         {
             name: "SOME_NAME",
             norm_function: "std | ma_std | minmax | time",
+            
             period: 69,
             class_meanings: ["BUY", "SELL"],
-            is_target: false
+            is_target: false,
+            mean: 10.5,
+            std: 10.5
         },
         ...
     ]
@@ -33,6 +36,7 @@ class ColumnConfig:
     "period" is optional and is used for ma_std (moving average then pct_change then standardise)
     "class_meanings" is optional. It is only relevant when is_target is true
     "is_target" is optional. It is only relevant when it is the target column
+    "mean" and "std" is optional. They are only added by a data preprocessor when using std or ma_std norm_function
     
     """
     def __init__(self, columns: List[str], *, target_column: str, class_meanings: List[str]) -> None:
@@ -71,6 +75,9 @@ class ColumnConfig:
                 
     def set_norm_function(self, name: str, norm_function: NormFunction, args: dict = {}):
         self.config[name]["norm_function"] = norm_function
+        self.config[name] = {**args, **self.config[name]}
+
+    def add_args(self, name: str, args: dict = {}):
         self.config[name] = {**args, **self.config[name]}
 
     def to_json(self) -> str:
