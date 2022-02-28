@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from collections import OrderedDict
 from enum import Enum
 
@@ -22,7 +22,8 @@ class ColumnConfig:
             name: "SOME_NAME",
             norm_function: "std | ma_std | minmax | time",
             period: 69,
-            class_meanings: ["SELL", "BUY"]
+            class_meanings: ["SELL", "BUY"],
+            is_target: false
         },
         ...
     ]
@@ -30,17 +31,29 @@ class ColumnConfig:
     The order of the array is important; this is the order of the columns in the df / numpy sequence array
     
     "period" is optional and is used for ma_std (moving average then pct_change then standardise)
-    "class_meanings" is optional. It is only relevant when the name is "target".
+    "class_meanings" is optional. It is only relevant when is_target is true
+    "is_target" is optional. It is only relevant when it is the target column
     
     """
-    def __init__(self, columns: List[str], class_meanings: List[str]) -> None:
-        self.config = OrderedDict()
+    def __init__(self, columns: List[str], *, target_column: str, class_meanings: List[str]) -> None:
+        self.config: OrderedDict = OrderedDict()
         for col in columns:
             self.config[col] = {}
-        self.config["target"] = {}
-        self.config["target"]["class_meanings"] = class_meanings
+            if col == target_column:
+                self.config[col]["class_meanings"] = class_meanings
+                self.config[col]["is_target"] = True
+        self.target_column = target_column
         self.default_function = NormFunction.STD
         self.default_function_args: Dict[str, Any] = {}
+
+
+    def set_target(self, col_name: str, class_meanings: Optional[List[str]] = None):
+        class_meanings = class_meanings or self.config[self.target_column]["class_meanings"]
+        del self.config[self.target_column]["class_meanings"]
+        del self.config[self.target_column]["is_target"]
+        self.target_column = col_name
+        self.config[col_name]["class_meanings"] = class_meanings
+        self.config[col_name]["is_target"] = True
 
     def set_default_norm_function(self, norm_function: NormFunction, args: dict = {}):
         self.default_function = norm_function
@@ -50,9 +63,8 @@ class ColumnConfig:
         config: OrderedDict[str, Any] = OrderedDict()
         for col_name, value in self.config.items():
             config[col_name] = {}
-            if "norm_function" not in value and col_name != "target":
-                config[col_name]["norm_function"] = self.default_function
-                config[col_name] = {**self.default_function_args, **config[col_name]}
+            if "norm_function" not in value:
+                config[col_name] = {"norm_function": self.default_function, **self.default_function_args, **value}
             else:
                 config[col_name] = value
         return config
@@ -68,8 +80,7 @@ class ColumnConfig:
         for col_name, value in config.items():
             config_value = value
             config_value["name"] = col_name
-            if col_name != "target":
-                config_value["norm_function"] = config_value["norm_function"].value
+            config_value["norm_function"] = config_value["norm_function"].value
             config_arr.append(config_value)
         return json.dumps(config_arr)
 
@@ -78,14 +89,14 @@ class ColumnConfig:
         config_arr: List[dict] = json.loads(json_string)
         colname_arr = []
         class_meanings = []
+        target_column = ""
         for val in config_arr:
             colname_arr.append(val["name"])
-            if val["name"] == "target":
+            if "is_target" in val and val["is_target"] == True:
                 class_meanings = val["class_meanings"]
-        col_config = ColumnConfig(columns=colname_arr, class_meanings=class_meanings)
+                target_column = val["name"]
+        col_config = ColumnConfig(columns=colname_arr, target_column=target_column, class_meanings=class_meanings)
         for val in config_arr:
-            if val["name"] == "target":
-                continue
             val_args = val.copy()
             del val_args["name"]
             col_config.set_norm_function(val["name"], NormFunction(val["norm_function"]), val_args)

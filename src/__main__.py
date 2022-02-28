@@ -44,7 +44,7 @@ def main():
     df = data_updater.get_required_data(
         "EURUSD",
         start = datetime(2021, 9, 16),
-        end = datetime.now(),
+        end = datetime(2022, 1, 1),
         multiplier = 1,
         measurement = "minute"
     )
@@ -79,7 +79,7 @@ def main():
     # rnn.save_model(dataset)
     # filepath = get_filepath()
     # rnn.load_model(filepath)
-    col_config = ColumnConfig(df.columns, ["SELL", "BUY"])
+    col_config = ColumnConfig(df.columns, target_column="c", class_meanings=["SELL", "BUY"])
     col_config.set_default_norm_function(NormFunction.MA_STD, {"period": 10})
     print(col_config.to_dict())
     print(ColumnConfig.from_json(col_config.to_json()).to_dict())
