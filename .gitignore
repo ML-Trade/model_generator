@@ -1,5 +1,6 @@
 ## Sensitive info
 tokens.json
+tokens/
 
 ## Local State Folders
 /data/
