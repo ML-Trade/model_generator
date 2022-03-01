@@ -10,6 +10,7 @@ import os
 import glob
 
 
+
 ## TODO: Move me to utils
 def moving_average(series: pd.Series, period: int) -> pd.Series :
     """
@@ -41,47 +42,48 @@ def main():
     print(f"Google Drive Token: {data_updater.google_drive_token}")
     print(f"Polygon.io Token: {data_updater.polygonio_token}")
 
-    df = data_updater.get_required_data(
-        "EURUSD",
-        start = datetime(2021, 9, 16),
-        end = datetime(2022, 1, 1),
-        multiplier = 1,
-        measurement = "minute"
-    )
-    df.drop(columns=["vw", "n"], inplace=True)
-    
-    print(df)
-    print("Preprocessing Data...")
+    data_updater.upload_to_drive(os.path.join(environ["workspace"], "models", "RNN__60-60-60__Loss-inf__2022-02-28T21;06;36.tar"), "models/RNN__60-60-60__Loss-inf__2022-02-28T21;06;36.tar")
 
-    VOLUME_MA_PERIOD = 5
-    preprocessor = TSDataPreprocessor()
-    pd.set_option('display.max_columns', None)
-    col_config = ColumnConfig(df.columns, target_column="c", class_meanings=["BUY", "SELL"])
-    col_config.set_norm_function("t", NormFunction.TIME)
-    col_config.set_norm_function("v", NormFunction.MA_STD, {"period": VOLUME_MA_PERIOD})
-    dataset = preprocessor.preprocess(df,
-        col_config=col_config,
-        sequence_length=80,
-        forecast_period=10,
-    )
-
-    rnn = RNN(
-        layers=[60, 60, 60],
-        x_shape=dataset.train_x.shape,
-        y_shape=dataset.train_y.shape 
-    )
-    # rnn.train(
-    #     dataset,
-    #     batch_size=1000,
-    #     max_epochs=3
+    # df = data_updater.get_ohlc_data(
+    #     "EURUSD",
+    #     start = datetime(2021, 9, 16),
+    #     end = datetime(2022, 1, 1),
+    #     multiplier = 1,
+    #     measurement = "minute"
     # )
-    # rnn.predict(dataset)
-    model_path = rnn.save_model(col_config)
-    new_model = RNN.load_model(model_path)
+    # df.drop(columns=["vw", "n"], inplace=True)
+    
+    # print(df)
+    # print("Preprocessing Data...")
 
+    # VOLUME_MA_PERIOD = 5
+    # preprocessor = TSDataPreprocessor()
+    # pd.set_option('display.max_columns', None)
+    # col_config = ColumnConfig(df.columns, target_column="c", class_meanings=["BUY", "SELL"])
+    # col_config.set_norm_function("t", NormFunction.TIME)
+    # col_config.set_norm_function("v", NormFunction.MA_STD, {"period": VOLUME_MA_PERIOD})
+    # dataset = preprocessor.preprocess(df,
+    #     col_config=col_config,
+    #     sequence_length=80,
+    #     forecast_period=10,
+    # )
+
+    # rnn = RNN(
+    #     layers=[60, 60, 60],
+    #     x_shape=dataset.train_x.shape,
+    #     y_shape=dataset.train_y.shape 
+    # )
+    # # rnn.train(
+    # #     dataset,
+    # #     batch_size=1000,
+    # #     max_epochs=3
+    # # )
+    # # rnn.predict(dataset)
+    # model_path = rnn.save_model(col_config)
 
     # filepath = get_filepath()
     # rnn.load_model(filepath)
+    
 
 
 if __name__ == "__main__":

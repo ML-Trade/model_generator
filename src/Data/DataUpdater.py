@@ -27,8 +27,9 @@ from utils.polygon_api import format_symbol_for_api
 import calendar
 import pandas as pd
 import time
-from googleapiclient.discovery import build
+from googleapiclient.discovery import build, mimetypes
 from oauth2client.service_account import ServiceAccountCredentials
+from googleapiclient.http import MediaFileUpload
 
 def get_time_delta(multiplier: int, measurement: str) -> timedelta:
     if measurement == "second":
@@ -149,44 +150,14 @@ class DataUpdater:
         ).json()
         return res
 
-
-    def _get_mime_type(file_type: str):
-        mime_types = {
-            "xls" :'application/vnd.ms-excel',
-            "xlsx" :'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            "xml" :'text/xml',
-            "ods":'application/vnd.oasis.opendocument.spreadsheet',
-            "csv":'text/plain',
-            "tmpl":'text/plain',
-            "pdf": 'application/pdf',
-            "php":'application/x-httpd-php',
-            "jpg":'image/jpeg',
-            "png":'image/png',
-            "gif":'image/gif',
-            "bmp":'image/bmp',
-            "txt":'text/plain',
-            "doc":'application/msword',
-            "js":'text/js',
-            "swf":'application/x-shockwave-flash',
-            "mp3":'audio/mpeg',
-            "zip":'application/zip',
-            "rar":'application/rar',
-            "tar":'application/tar',
-            "arj":'application/arj',
-            "cab":'application/cab',
-            "html":'text/html',
-            "htm":'text/html',
-            "default":'application/octet-stream',
-            "folder":'application/vnd.google-apps.folder'
-        }
-
     @staticmethod
     def _create_folder(service: Any, folder_path: str) -> str:
         """
         Creates folder. If exists, leaves it.
         Returns the folder ID
         """
-        folders = os.path.split(folder_path)
+        folder_path = os.path.normpath(folder_path)
+        folders = folder_path.split(os.sep)
         parent_id = "root"
         for folder in folders:
             metadata = {
@@ -211,16 +182,10 @@ class DataUpdater:
                     parent_id = file.get("id")
                     break
 
-        
-        
         return parent_id
 
-
-    def upload_to_drive(self, filepath: str, drive_filepath: str) -> bool:
-        """
-        Returns a boolean indicating the success of the operation
-        Will overwrite the file by default if it already exists
-        """
+    @staticmethod
+    def _get_drive_service():
         SCOPES = ['https://www.googleapis.com/auth/drive']
         KEY_FILE_LOCATION = os.path.join(os.environ["workspace"], "tokens", "google_drive_credentials.json")
         if not os.path.isfile(KEY_FILE_LOCATION):
@@ -229,12 +194,35 @@ class DataUpdater:
         # Any is returned from build (it is constructed dynamically), so no intellisense here big man.
         # See https://developers.google.com/drive/api/v3/reference/files
         creds = ServiceAccountCredentials.from_json_keyfile_name(KEY_FILE_LOCATION, SCOPES)
-        service = build("drive", "v3", credentials=creds)
+        return build("drive", "v3", credentials=creds)
 
-        DataUpdater._create_folder(service, "test/wow_folder")
-        # service.files().delete(fileId="1xducu43U1P2kJ4taO3E_zEynR244yvEM").execute()
+    def _delete_all_drive_items(service: Any):
+        response = service.files().list(spaces="drive", fields="files(id)").execute()
+        ids = [x["id"] for x in response["files"]]
+        for ID in ids:
+            service.files().delete(fileId=ID).execute()
+        
+    def _print_all_drive_items(service: Any):
         response = service.files().list(spaces="drive", fields="files(id, name, mimeType, parents)").execute()
         print(json.dumps(response, indent=2))
-        # print(response.get("files", []))
 
-        return True
+    def upload_to_drive(self, filepath: str, drive_filepath: str) -> str:
+        """
+        Returns the id of the file uploaded to google drive
+        If a file already exists with the same name, a new file is created with same name but different id
+        """
+
+        service = DataUpdater._get_drive_service()
+
+        folder_id = DataUpdater._create_folder(service, os.path.dirname(drive_filepath))
+        
+        mime_type: str = mimetypes.guess_type(filepath)[0]
+        metadata = {
+            "name": os.path.basename(drive_filepath),
+            "mimeType": mime_type,
+            "parents": [folder_id]
+        }
+        media = MediaFileUpload(filepath, mimetype=mime_type, resumable=True)
+        file = service.files().create(body=metadata, media_body=media, fields="id").execute()
+
+        return file.get("id")
