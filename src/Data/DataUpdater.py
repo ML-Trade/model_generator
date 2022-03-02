@@ -31,6 +31,8 @@ from googleapiclient.discovery import build, mimetypes
 from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.http import MediaFileUpload
 
+FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
+
 def get_time_delta(multiplier: int, measurement: str) -> timedelta:
     if measurement == "second":
         return timedelta(seconds = multiplier)
@@ -54,26 +56,7 @@ def get_last_day_of_month(date: datetime):
     return last_day_of_month
 
 
-class MimeType(Enum):
-    FOLDER = "application/vnd.google-apps.folder"
-    DEFAULT = "application/octet-stream"
-    HTML = "text/html"
-    TAR = "application/tar"
-    RAR = "application/rar"
-    MP3 = "audio/mpeg"
-    ZIP = "application/zip"
-    DOC = "application/msword"
-    JS = "text/js"
-    JPG = "image/jpeg"
-    PNG = "image/png"
-    GIF = "image/gif"
-    BMP = "image/bmp"
-    TXT = "text/plain"
-    PDF = "application/pdf"
-    CSV = "text/plain"
-    XLS = "application/vnd.ms-excel"
-    XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    XML = "text/xml"
+
 
 class DataUpdater:
 
@@ -162,20 +145,17 @@ class DataUpdater:
         for folder in folders:
             metadata = {
                 "name": folder,
-                "mimeType": MimeType.FOLDER.value,
+                "mimeType": FOLDER_MIME_TYPE,
                 "parents": [parent_id]
             }
 
             page_token = None
-            folder_exists = False
             while True:   
-                response = service.files().list(q=f"mimeType = '{MimeType.FOLDER.value}' and name = '{folder}' and '{parent_id}' in parents", spaces="drive", fields="nextPageToken, files(id, name)", pageToken=page_token).execute()
-                for file in response.get("files", []):
-                    if file.get("name") == folder:
-                        parent_id = file.get("id")
-                        folder_exists = True
-                        break
-                if folder_exists: break
+                response = service.files().list(q=f"mimeType = '{FOLDER_MIME_TYPE}' and name = '{folder}' and '{parent_id}' in parents", spaces="drive", fields="nextPageToken, files(id, name)", pageToken=page_token).execute()
+                files = response.get("files", [])
+                if len(files) != 0:
+                    parent_id = files[0].get("id")
+                    break
                 page_token = response.get("nextPageToken", None)
                 if page_token is None:
                     file = service.files().create(body=metadata, fields="id").execute()
