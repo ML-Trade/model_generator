@@ -14,7 +14,6 @@ For < hour
 {symbol}-{minute}-{measurement}-{start}-{end}.csv
 """
 
-# TODO: Remove this when / if you upgrade to the paid tier on polygon.io
 IS_FREE_TIER = True
 
 from enum import Enum
@@ -23,7 +22,10 @@ import os
 from typing import Any
 import requests
 from datetime import date, timedelta, datetime
+from mltradeshared import DatasetMetadata
+from mltradeshared.utils.dates import get_time_delta
 from utils.polygon_api import format_symbol_for_api
+from mltradeshared.utils.dates import get_time_delta
 import calendar
 import pandas as pd
 import time
@@ -33,30 +35,9 @@ from googleapiclient.http import MediaFileUpload
 
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
-def get_time_delta(multiplier: int, measurement: str) -> timedelta:
-    if measurement == "second":
-        return timedelta(seconds = multiplier)
-    elif measurement == "minute":
-        return timedelta(minutes = multiplier)
-    elif measurement == "hour":
-        return timedelta(hours = multiplier)
-    elif measurement == "day":
-        return timedelta(days = multiplier)
-    elif measurement == "week":
-        return timedelta(weeks = multiplier)
-    elif measurement == "month":
-        return timedelta(days = 30.4167 * multiplier)
-    elif measurement == "year":
-        return timedelta(days = 365 * multiplier)
-    return timedelta(minutes = 1)
-    
-
 def get_last_day_of_month(date: datetime):
     (_, last_day_of_month) = calendar.monthrange(date.year, date.month)
     return last_day_of_month
-
-
-
 
 class DataUpdater:
 
@@ -70,11 +51,16 @@ class DataUpdater:
         self.google_drive_token = tokens["google_drive"]
         self.polygonio_token = tokens["polygonio"]
         
-    def get_ohlc_data(self, symbol: str, *, start: datetime, end: datetime, multiplier = 1, measurement = "minute") -> pd.DataFrame:
+    def get_ohlc_data(self, meta: DatasetMetadata) -> pd.DataFrame:
         """
         Gets requested historical data and returns as a Pandas dataframe.
         Historical data obtained from polygon.io api for the first time is saved locally in the root data folder 
         """
+        symbol = meta.symbol
+        start = meta.start
+        end = meta.end
+        multiplier = meta.candle_time.multiplier
+        measurement = meta.candle_time.measurement
         data_folder = os.path.join(os.environ["workspace"], "data", "raw")
         time_delta = get_time_delta(multiplier, measurement)
 
@@ -107,6 +93,9 @@ class DataUpdater:
                     range_df = pd.DataFrame.from_dict(res["results"])
                     df = pd.concat([df, range_df])
                     df.reset_index(inplace=True, drop=True)
+                    if "t" in range_df.columns:
+                        range_df["t"] = range_df["t"] / 1000.0 # Data comes in ms since epoch for some reason. Convert to POSIX timestamp (seconds since epoch)
+
                     print(range_df)
                     print("Obtained from polygon.io")
 
@@ -204,5 +193,7 @@ class DataUpdater:
         }
         media = MediaFileUpload(filepath, mimetype=mime_type, resumable=True)
         file = service.files().create(body=metadata, media_body=media, fields="id").execute()
+
+        print(f"Successfully uploaded {filepath} to {drive_filepath} in google drive")
 
         return file.get("id")
