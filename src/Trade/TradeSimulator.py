@@ -51,4 +51,28 @@ class TradeSimulator:
                 self.tm.make_trade(prediction, data_point, set_trade_id, ATR=ATR)
 
     def summary(self):
-        print(f"\nFinal Balance: {self.tm.balance}")
+        final_balance = self.tm.balance
+        average_loss_pct = self.tm.risk_per_trade * 100
+        average_win_pct = self.tm.risk_per_trade * (self.tm.take_profit_ATR / self.tm.stop_loss_ATR) * 100
+        num_trades = 0
+        num_wins = 0
+        num_losses = 0
+        for trade in self.tm.closed_trades:
+            if trade.close_price > trade.open_price:
+                if trade.is_buy:
+                    num_wins += 1
+                else:
+                    num_losses += 1
+            else:
+                if not trade.is_buy:
+                    num_wins += 1
+                else:
+                    num_losses += 1
+            num_trades += 1
+
+        print(f"\nFinal Balance: {final_balance}")
+        print(f"Number of trades: {num_trades}")
+        print(f"Number of wins: {num_wins}")
+        print(f"Number of losses: {num_losses}")
+        print(f"Average Win: {average_win_pct}%")
+        print(f"Average Loss: {average_loss_pct}%")
