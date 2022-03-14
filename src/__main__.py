@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List
 from mltradeshared import ColumnConfig, NormFunction, TSDataPreprocessor, RNN, ModelFileInfo, DatasetMetadata, TimeMeasurement
+from mltradeshared.Trade import TradeManager
 from os import environ, path
 from Data import DataUpdater
 import numpy as np
@@ -8,6 +9,8 @@ import pandas as pd
 import os
 import glob
 import tensorflow as tf
+from keras.layers import GRU
+from Trade import TradeSimulator
 
 
 def get_filepath():
@@ -42,8 +45,8 @@ def main():
         start = datetime(2021, 9, 16),
         end = datetime(2022, 1, 1),
         candle_time = TimeMeasurement("minute", 1),
-        forecast_period = TimeMeasurement("minute", 10),
-        sequence_length = 80,
+        forecast_period = TimeMeasurement("minute", 20),
+        sequence_length = 150,
         train_split = 0.8
     )
 
@@ -67,18 +70,47 @@ def main():
 
     rnn = RNN(
         layers=[60, 60, 60],
+        is_bidirectional=False,
+        dropout=0.1,
+        architecture=GRU,
         x_shape=dataset.train_x.shape,
         y_shape=dataset.train_y.shape 
     )
     rnn.train(
         dataset,
-        batch_size=5000,
-        max_epochs=3
+        batch_size=2048,
+        max_epochs=3,
+        early_stop_patience=10
     )
+
+    model_path = rnn.save_model(col_config, dataset, dataset_metadata)
+    rnn, metadata = rnn.load_model(model_path, return_metadata=True)
+
+    tm = TradeManager(
+        balance=100000.0,
+        max_trade_time=TimeMeasurement("minute", 35),
+        trade_cooldown=TimeMeasurement("minute", 10),
+        risk_per_trade=0.02,
+        max_open_risk=0.06,
+        dif_percentiles=metadata["dif_percentiles"]["data"],
+        fraction_to_trade=0.051231,
+        max_trade_history=None,
+        stop_loss_ATR=1,
+        take_profit_ATR=2
+    )
+
+    val_df = df.iloc[:-int(len(df) * dataset_metadata.train_split)]
+    trade_sim = TradeSimulator(
+        val_df, dataset.val_x, tm, rnn
+    )
+    
+    trade_sim.start()
+    # Execution time, profit, number of trades, number of wins, number of losses, w/l ratio. Average win%, average loss%
+    trade_sim.summary()
+    
     # # rnn.predict(dataset)
-    model_path = rnn.save_model(col_config, dataset=dataset, dataset_metadata=dataset_metadata)
-    file_name = os.path.basename(model_path)
-    data_updater.upload_to_drive(model_path, f"models/{file_name}")
+
+    # data_updater.upload_to_drive(model_path, f"models/{file_name}")
 
     # filepath = get_filepath()
     # rnn.load_model(filepath)

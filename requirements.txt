@@ -28,7 +28,7 @@ libclang==12.0.0
 Markdown==3.3.6
 MarkupSafe==2.0.1
 mccabe==0.6.1
-mltradeshared @ git+ssh://git@github.com/ML-Trade/ml-trade-shared.git@2951808069114ca1d23dc2e8577c3780f1c4b256
+mltradeshared @ git+ssh://git@github.com/ML-Trade/ml-trade-shared.git@d4ebd2bcfe40136a1823a7d08aa408591aebdfe3
 mypy==0.931
 mypy-extensions==0.4.3
 numpy==1.21.5
